@@ -36,6 +36,11 @@ services:
     volumes:
       - ../../self-hosting/clickhouse/clickhouse-config.xml:/etc/clickhouse-server/config.d/op-config.xml:ro
       - ../../self-hosting/clickhouse/clickhouse-user-config.xml:/etc/clickhouse-server/users.d/op-user-config.xml:ro
+      # init-db.sh creates the `gigapipe` user with `SETTINGS PROFILE 'telemetry'`,
+      # so the profile has to exist before the entrypoint runs it. Without this
+      # mount the CREATE USER fails, the init script aborts, and the container
+      # exits 180 before anything else starts. Mirrors both real composes.
+      - ../../self-hosting/clickhouse/clickhouse-telemetry-profile.xml:/etc/clickhouse-server/users.d/op-telemetry-profile.xml:ro
       - ../../self-hosting/clickhouse/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
     environment:
       # Required on this image tag: without it the entrypoint provisions a
