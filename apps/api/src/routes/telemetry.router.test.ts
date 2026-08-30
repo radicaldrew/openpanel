@@ -13,6 +13,7 @@
  * handler calls it, or calls it before forwarding.
  */
 
+import zlib from 'node:zlib';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ─── Module mocks (hoisted before imports) ───────────────────────────────────
@@ -247,6 +248,57 @@ describe('content type', () => {
 
     expect(res.statusCode).toBe(415);
     expect(forwarded).toHaveLength(0);
+  });
+});
+
+// ─── Content encoding ────────────────────────────────────────────────────────
+
+/**
+ * The OpenTelemetry Collector's otlphttp exporter gzips BY DEFAULT. A stock
+ * collector pointed at these routes therefore sends gzipped protobuf, and
+ * before the parser handled it the decoder read the gzip header as protobuf and
+ * failed with "unsupported wire type 7 for field 3" — 0x1f is the gzip magic
+ * byte and decodes as field 3, wire type 7.
+ */
+describe('content encoding', () => {
+  it('accepts a gzipped payload and forwards it stamped', async () => {
+    const raw = metricsPayload([numberDataPoint([kv('route', '/x')])]);
+    const res = await post(zlib.gzipSync(raw), {
+      ...AUTH,
+      ...PROTOBUF,
+      'content-encoding': 'gzip',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(forwarded).toHaveLength(1);
+    expect(readStampedProjectIds(forwarded[0]!.body)).toEqual([PROJECT_ID]);
+  });
+
+  it('rejects a body that claims gzip but is not', async () => {
+    const res = await post(Buffer.from([0x1f, 0x8b, 0x00, 0x01, 0x02]), {
+      ...AUTH,
+      ...PROTOBUF,
+      'content-encoding': 'gzip',
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(forwarded).toHaveLength(0);
+  });
+
+  // Prometheus remote-write posts the same content type with
+  // `content-encoding: snappy` and decompresses in its own handler, so any
+  // coding that is not gzip has to reach the handler byte-for-byte.
+  it('passes a non-gzip coding through untouched', async () => {
+    const raw = metricsPayload([numberDataPoint([kv('route', '/x')])]);
+    const res = await post(raw, {
+      ...AUTH,
+      ...PROTOBUF,
+      'content-encoding': 'snappy',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(forwarded).toHaveLength(1);
+    expect(readStampedProjectIds(forwarded[0]!.body)).toEqual([PROJECT_ID]);
   });
 });
 
