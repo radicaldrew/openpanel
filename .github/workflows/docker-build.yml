@@ -30,7 +30,11 @@ on:
       - "**/.prettierignore"
 
 env:
-  repo_owner: "openpanel-dev"
+  # Follows whoever owns the repo, so a fork pushes to its own GHCR namespace
+  # instead of failing on a registry it cannot write to. GHCR requires a
+  # lowercase owner; GitHub usernames are case-insensitive but the API returns
+  # them as typed, so this is lowercased at use.
+  repo_owner: ${{ github.repository_owner }}
 
 jobs:
   lint-and-test:
