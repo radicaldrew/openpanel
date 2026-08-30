@@ -17,6 +17,12 @@ docker/data*
 
 logs
 !self-hosting/logs
+# `logs` above is a bare pattern, so it silently swallows ANY directory named
+# `logs` at any depth — including source. This one holds the Loki push envelope
+# and the OTLP log decoder; without the negation `git add` skips it without a
+# word and the build fails with "Cannot find module './src/logs/envelope'".
+!packages/gigapipe/src/logs
+!packages/gigapipe/src/logs/**
 _.log
 npm-debug.log_
 yarn-debug.log*
