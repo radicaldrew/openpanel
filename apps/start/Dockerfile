@@ -32,6 +32,7 @@ COPY packages/common/package.json packages/common/
 COPY packages/importer/package.json packages/importer/
 COPY packages/payments/package.json packages/payments/
 COPY packages/constants/package.json packages/constants/
+COPY packages/gigapipe/package.json packages/gigapipe/
 COPY packages/validation/package.json packages/validation/
 COPY packages/integrations/package.json packages/integrations/
 COPY packages/sdks/_info/package.json packages/sdks/_info/
@@ -90,6 +91,7 @@ COPY --from=build /app/packages/common/package.json ./packages/common/
 COPY --from=build /app/packages/importer/package.json ./packages/importer/
 COPY --from=build /app/packages/payments/package.json ./packages/payments/
 COPY --from=build /app/packages/constants/package.json ./packages/constants/
+COPY --from=build /app/packages/gigapipe/package.json ./packages/gigapipe/
 COPY --from=build /app/packages/validation/package.json ./packages/validation/
 COPY --from=build /app/packages/integrations/package.json ./packages/integrations/
 COPY --from=build /app/packages/sdks/_info/package.json ./packages/sdks/_info/
@@ -149,6 +151,7 @@ COPY --from=build /app/packages/json ./packages/json
 COPY --from=build /app/packages/common ./packages/common
 COPY --from=build /app/packages/payments ./packages/payments
 COPY --from=build /app/packages/constants ./packages/constants
+COPY --from=build /app/packages/gigapipe ./packages/gigapipe
 COPY --from=build /app/packages/validation ./packages/validation
 COPY --from=build /app/packages/integrations ./packages/integrations
 COPY --from=build /app/packages/sdks/_info ./packages/sdks/_info
