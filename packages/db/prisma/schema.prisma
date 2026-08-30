@@ -292,6 +292,7 @@ model Project {
   imports           Import[]
   gscConnection     GscConnection?
   cohorts           Cohort[]
+  savedTelemetrySearches SavedTelemetrySearch[]
 
   // When deleteAt > now(), the project will be deleted
   deleteAt DateTime?
@@ -354,6 +355,16 @@ enum ClientType {
   read
   write
   root
+  // Telemetry ingest (OTLP metrics, Prometheus remote-write). Appended last to
+  // match what `ALTER TYPE ... ADD VALUE` does in the DB, so `prisma migrate`
+  // reports no drift.
+  //
+  // This type grants NOTHING except telemetry ingest. Every other validator in
+  // apps/api/src/utils/auth.ts allow-lists the types it accepts rather than
+  // deny-listing the ones it rejects — before this value existed, the export
+  // and import validators only rejected `write`, so a new type would have been
+  // silently accepted by both.
+  telemetry
 }
 
 model Client {
@@ -412,6 +423,15 @@ model Dashboard {
   @@map("dashboards")
 }
 
+/// Where a report's data comes from. `events` is OpenPanel's own analytics;
+/// `metrics` is server telemetry queried through gigapipe. Both engines return
+/// the same FinalChart, so everything downstream — renderers, dashboards,
+/// layouts, shares, widgets, MCP tools — is unaware there are two.
+enum ReportDataSource {
+  events
+  metrics
+}
+
 enum Metric {
   sum
   average
@@ -446,6 +466,15 @@ model Report {
   visibleSeries String[]
   startDate     String?
   endDate       String?
+
+  /// Defaults to `events`, so every existing row is already correct and no
+  /// backfill is needed.
+  dataSource ReportDataSource @default(events)
+  /// The structured metric query, when dataSource is `metrics`. Deliberately
+  /// NOT raw PromQL: the compiler is the only emitter of a selector, which is
+  /// what makes the tenancy matcher unforgeable.
+  /// [IPrismaMetricQuery]
+  metricQuery Json?
 
   dashboardId String
   dashboard   Dashboard     @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
@@ -592,8 +621,65 @@ model NotificationRule {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @default(now()) @updatedAt
   notifications Notification[]
+  alertStates   MetricAlertState[]
 
   @@map("notification_rules")
+}
+
+/// Per-series state for a metric alert rule.
+///
+/// One row per (rule, series) because a single rule's query legitimately
+/// returns many series — one per route, per service — and each must alert and
+/// resolve independently. Collapsing them would mean one noisy route suppresses
+/// every other route's alert.
+/// A named log or trace search.
+///
+/// The equivalent of a saved report for signals that do not render as a chart.
+/// Stored as a structured query, never a raw LogQL string — the compiler is the
+/// only emitter of a selector, which is what keeps the tenancy matcher
+/// unforgeable even for a query someone saved months ago.
+model SavedTelemetrySearch {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  name String
+  /// logs | traces
+  kind String
+  /// [IPrismaSavedTelemetryQuery]
+  query Json
+
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([projectId, kind])
+  @@map("saved_telemetry_searches")
+}
+
+model MetricAlertState {
+  id     String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ruleId String @db.Uuid
+  rule   NotificationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  /// Stable identity of the series within the rule: the sorted label set.
+  seriesKey String
+  /// Human-readable labels, for the notification body.
+  labels    Json
+
+  /// inactive | pending | firing
+  state         String
+  pendingSince  DateTime?
+  lastNotifiedAt DateTime?
+  lastEvaluatedAt DateTime?
+  lastValue     Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([ruleId, seriesKey])
+  @@index([ruleId])
+  @@map("metric_alert_states")
 }
 
 model Notification {

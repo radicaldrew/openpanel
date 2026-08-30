@@ -57,6 +57,7 @@ import miscRouter from './routes/misc.router';
 import oauthRouter from './routes/oauth-callback.router';
 import profileRouter from './routes/profile.router';
 import toolsRouter from './routes/tools.router';
+import telemetryRouter from './routes/telemetry.router';
 import trackRouter from './routes/track.router';
 import webhookRouter from './routes/webhook.router';
 import { HttpError, normalizeError } from './utils/errors';
@@ -70,6 +71,8 @@ declare module 'fastify' {
     clientIpHeader: string;
     timestamp?: number;
     session: SessionValidationResult;
+    /** Set by the telemetry router's preHandler; the label every stored series carries. */
+    telemetryProjectId?: string;
   }
 }
 
@@ -212,6 +215,8 @@ export async function buildApp(
     instance.register(oauthRouter, { prefix: '/oauth' });
     instance.register(gscCallbackRouter, { prefix: '/gsc' });
     instance.register(miscRouter, { prefix: '/misc' });
+    // Telemetry ingest. Registers nothing when gigapipe is unconfigured.
+    instance.register(telemetryRouter, { prefix: '/telemetry' });
     // Better Agent chat, mounted under /ai/agents/*.
     //
     // The wrapper does three things before delegating to the Better

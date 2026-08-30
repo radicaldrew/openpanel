@@ -21,6 +21,7 @@ import { sessionReaperCronJob } from './cron.session-reaper';
 import { sessionVacuumCronJob } from './cron.session-vacuum';
 import { gscSyncAllJob } from './gsc';
 import { insightsDailyJob } from './insights';
+import { metricAlertsCronJob } from './cron.metric-alerts';
 import { logger } from '@/utils/logger';
 
 export async function cronJob(job: Job<CronQueuePayload>) {
@@ -28,6 +29,9 @@ export async function cronJob(job: Job<CronQueuePayload>) {
   switch (job.data.type) {
     case 'salt': {
       return await salt();
+    }
+    case 'metricAlerts': {
+      return await metricAlertsCronJob();
     }
     case 'flushEvents': {
       return await eventBuffer.tryFlush({ trigger: 'cron' });

@@ -60,7 +60,15 @@ export type IGetChartDataInput = {
   endDate: string;
 } & Omit<
   IReportInput,
-  'series' | 'globalFilters' | 'startDate' | 'endDate' | 'range'
+  | 'series'
+  | 'globalFilters'
+  | 'startDate'
+  | 'endDate'
+  | 'range'
+  // The event SQL builder never sees these: a metrics report is dispatched to a
+  // different engine entirely before this type is constructed.
+  | 'dataSource'
+  | 'metricQuery'
 >;
 export type ICriteria = z.infer<typeof zCriteria>;
 

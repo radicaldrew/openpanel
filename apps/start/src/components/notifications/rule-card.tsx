@@ -16,9 +16,19 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Tooltiper } from '../ui/tooltip';
 
+/**
+ * Narrowed to the event-shaped config variants. The union also contains
+ * `metric` rules, which have no `events` at all — indexing the whole union
+ * compiled only while every variant happened to have that field.
+ */
+type EventRuleConfig = Extract<
+  NotificationRule['config'],
+  { events: unknown[] }
+>;
+
 function EventBadge({
   event,
-}: { event: NotificationRule['config']['events'][number] }) {
+}: { event: EventRuleConfig['events'][number] }) {
   return (
     <Tooltiper
       disabled={!event.filters.length}

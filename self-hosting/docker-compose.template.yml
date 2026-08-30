@@ -71,9 +71,14 @@ services:
       - op-ch-data:/var/lib/clickhouse
       - ./clickhouse/clickhouse-config.xml:/etc/clickhouse-server/config.d/op-config.xml:ro
       - ./clickhouse/clickhouse-user-config.xml:/etc/clickhouse-server/users.d/op-user-config.xml:ro
+      - ./clickhouse/clickhouse-telemetry-profile.xml:/etc/clickhouse-server/users.d/op-telemetry-profile.xml:ro
       - ./clickhouse/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
     environment:
       - CLICKHOUSE_SKIP_USER_SETUP=1
+      # Read by clickhouse/init-db.sh on first boot to create the constrained
+      # `gigapipe` user. Must match what op-gigapipe connects with.
+      - CLICKHOUSE_TELEMETRY_DB=${CLICKHOUSE_TELEMETRY_DB:-openpanel_telemetry}
+      - CLICKHOUSE_TELEMETRY_PASSWORD=${CLICKHOUSE_TELEMETRY_PASSWORD:?set CLICKHOUSE_TELEMETRY_PASSWORD in .env}
     healthcheck:
       test: ["CMD-SHELL", 'clickhouse-client --query "SELECT 1"']
       interval: 10s
@@ -87,6 +92,55 @@ services:
       driver: "json-file"
       options:
         max-size: "10m"
+        max-file: "3"
+
+  # Telemetry storage + query engine (metrics, logs, traces).
+  #
+  # Shares op-ch with OpenPanel, in its own database — see
+  # docs/observability/14-decisions.md D1. Deliberately publishes no ports:
+  # only op-api talks to it, and gigapipe serves write routes (Loki push,
+  # Elastic _bulk) plus an always-on cleartext gRPC OTLP receiver on the same
+  # port, so anything that can reach it can write telemetry.
+  #
+  # The `:?` guards below are not decoration. gigapipe installs its auth
+  # middleware ONLY when both QRYN_LOGIN and QRYN_PASSWORD are non-empty
+  # (cmd/gigapipe/main.go:321-324), and Compose substitutes a missing .env key
+  # with the empty string and a warning. Without these guards a typo produces
+  # a silently unauthenticated gigapipe that every healthcheck reports green.
+  #
+  # No healthcheck is declared: the upstream image's shell tooling has not been
+  # verified here, and a healthcheck that cannot run marks the container
+  # unhealthy and takes the stack down. Verify the stack instead with the smoke
+  # check in docs/observability/14-decisions.md D3 — an unauthenticated request
+  # must return 401.
+  op-gigapipe:
+    image: ${GIGAPIPE_IMAGE:-ghcr.io/metrico/gigapipe:latest}
+    restart: always
+    depends_on:
+      op-ch:
+        condition: service_healthy
+    environment:
+      - CLICKHOUSE_SERVER=op-ch
+      - CLICKHOUSE_PORT=9000
+      - CLICKHOUSE_DB=${CLICKHOUSE_TELEMETRY_DB:-openpanel_telemetry}
+      - CLICKHOUSE_AUTH=gigapipe:${CLICKHOUSE_TELEMETRY_PASSWORD:?set CLICKHOUSE_TELEMETRY_PASSWORD in .env}
+      - QRYN_LOGIN=${GIGAPIPE_USER:?set GIGAPIPE_USER in .env}
+      - QRYN_PASSWORD=${GIGAPIPE_PASSWORD:?set GIGAPIPE_PASSWORD in .env}
+      # Security-relevant, both verified against gigapipe source.
+      # When false, the LogQL planner silently DELETES matchers with empty
+      # values and `=~".*"` (planner_stream_select.go:31-46) — and the
+      # compiled op_project_id matcher is the only thing separating tenants.
+      - ADVANCED_OMIT_EMPTY_VALUES=true
+      # When true, registers four routes that carry no tenant predicate,
+      # including /loki/api/v1/index/volume, whose targetLabels is
+      # string-interpolated into a LogQL expression and re-parsed.
+      - LOG_DRILLDOWN=true
+      - SAMPLES_DAYS=${TELEMETRY_RETENTION_DAYS:-30}
+      - PORT=3100
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
         max-file: "3"
 
   op-api:

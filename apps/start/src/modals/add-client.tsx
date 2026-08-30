@@ -21,7 +21,7 @@ import { ModalContent, ModalHeader } from './Modal/Container';
 
 const validation = z.object({
   name: z.string().min(1),
-  type: z.enum(['read', 'write', 'root']),
+  type: z.enum(['read', 'write', 'root', 'telemetry']),
 });
 
 type IForm = z.infer<typeof validation>;

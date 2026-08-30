@@ -185,7 +185,12 @@ export type CronQueuePayloadWindDown = {
   type: 'windDown';
   payload: undefined;
 };
+export type CronQueuePayloadMetricAlerts = {
+  type: 'metricAlerts';
+  payload: undefined;
+};
 export type CronQueuePayload =
+  | CronQueuePayloadMetricAlerts
   | CronQueuePayloadSalt
   | CronQueuePayloadFlushEvents
   | CronQueuePayloadFlushSessions

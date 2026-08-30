@@ -142,6 +142,30 @@ const chartProcedure = publicProcedure.use(
   }
 );
 
+/**
+ * Public share links must not execute PromQL — yet.
+ *
+ * A shared metric report is not an injection risk: the query is loaded from the
+ * database, authored by a project member, and the anonymous viewer cannot alter
+ * it. The reason this is blocked is cost, not tenancy. An event report resolves
+ * to a bounded ClickHouse aggregate over one project's data; a metric report
+ * resolves to a PromQL range query against a backend shared by every project,
+ * with no per-share rate limit, no per-share sample budget and no way to revoke
+ * one query without revoking the share.
+ *
+ * Fail closed until those exist. Members viewing the same dashboard while signed
+ * in are unaffected — they go through the authenticated branch above.
+ *
+ * See docs/observability/14-decisions.md D13.
+ */
+function assertShareableDataSource(report: { dataSource?: string } | null) {
+  if (report?.dataSource === 'metrics') {
+    throw new TRPCForbiddenError(
+      'Metric reports cannot be viewed through a public share link yet',
+    );
+  }
+}
+
 export const chartRouter = createTRPCRouter({
   projectCard: protectedProcedure
     .use(cacheMiddleware(60 * 5))
@@ -596,6 +620,8 @@ export const chartRouter = createTRPCRouter({
       )
     )
     .query(({ input, ctx }) => {
+      assertShareableDataSource(ctx.report);
+
       const chartInput = ctx.report
         ? {
             ...ctx.report,
@@ -620,6 +646,8 @@ export const chartRouter = createTRPCRouter({
       )
     )
     .query(({ input, ctx }) => {
+      assertShareableDataSource(ctx.report);
+
       const chartInput = ctx.report
         ? {
             ...ctx.report,

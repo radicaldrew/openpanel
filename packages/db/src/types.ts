@@ -4,7 +4,9 @@ import type {
   IProjectAccessGrant,
   IIntegrationConfig,
   INotificationRuleConfig,
+  IMetricQuery,
   IProjectFilters,
+  ISavedTelemetryQuery,
   IWidgetOptions,
   InsightPayload,
 } from '@openpanel/validation';
@@ -29,6 +31,16 @@ declare global {
     type IPrismaClickhouseProfile = IClickhouseProfile;
     type IPrismaClickhouseBotEvent = IClickhouseBotEvent;
     type IPrismaCohortDefinition = CohortDefinition;
+    // The structured metric query behind a `dataSource = metrics` report. The
+    // compiler turns this into PromQL server-side; it is never raw PromQL, which
+    // is what keeps the tenancy matcher unforgeable.
+    // The validation package's type, not gigapipe's: this is what the report
+    // input is parsed into, so the two must be the same shape or a saved report
+    // cannot be fed back through the chart pipeline. zod defaults are applied on
+    // write, so the stored JSON always has them.
+    type IPrismaMetricQuery = IMetricQuery;
+    // A saved log or trace search. Structured, never a raw query string.
+    type IPrismaSavedTelemetryQuery = ISavedTelemetryQuery;
     // Each ChatMessage row stores one Better Agent `ConversationItem`
     // (message, tool call, or tool result) as JSON. Typed as `unknown[]`
     // here to avoid pulling `@better-agent/core` into @openpanel/db's

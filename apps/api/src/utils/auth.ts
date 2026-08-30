@@ -39,6 +39,28 @@ export class SdkAuthError extends Error {
   }
 }
 
+/**
+ * Allow-list the client types an entry point accepts.
+ *
+ * Deliberately an allow-list. Every validator in this file used to name the
+ * types it REJECTED, which meant a new `ClientType` was silently accepted
+ * everywhere that had not been updated — and `validateSdkRequest` named none at
+ * all, so any new type could write analytics events. Adding
+ * `ClientType.telemetry` turned that latent shape into a real privilege
+ * escalation. Stating what is allowed makes the next enum value fail closed.
+ */
+function assertClientTypeAllowed(
+  client: IServiceClientWithProject,
+  allowed: ClientType[],
+  context: string
+): void {
+  if (!allowed.includes(client.type)) {
+    throw new Error(
+      `${context}: Client type "${client.type}" is not allowed here`
+    );
+  }
+}
+
 export async function validateSdkRequest(
   req: FastifyRequest<{
     Body: ITrackHandlerPayload | DeprecatedPostEventPayload;
@@ -93,6 +115,17 @@ export async function validateSdkRequest(
 
   if (!client.project) {
     throw createError('Ingestion: Client has no project');
+  }
+
+  // Telemetry credentials must not be able to write analytics events. This
+  // function previously read `client.type` nowhere, so every type passed.
+  const INGEST_ALLOWED: ClientType[] = [
+    ClientType.read,
+    ClientType.write,
+    ClientType.root,
+  ];
+  if (!INGEST_ALLOWED.includes(client.type)) {
+    throw createError('Ingestion: Client is not allowed to ingest events');
   }
 
   // Filter out blocked IPs
@@ -199,9 +232,7 @@ export async function validateExportRequest(
     throw new Error('Export: Client has no secret');
   }
 
-  if (client.type === ClientType.write) {
-    throw new Error('Export: Client is not allowed to export');
-  }
+  assertClientTypeAllowed(client, [ClientType.read, ClientType.root], 'Export');
 
   if (!(await verifyPassword(clientSecret, client.secret))) {
     throw new Error('Export: Invalid client secret');
@@ -234,9 +265,7 @@ export async function validateImportRequest(
     throw new Error('Import: Client has no secret');
   }
 
-  if (client.type === ClientType.write) {
-    throw new Error('Import: Client is not allowed to import');
-  }
+  assertClientTypeAllowed(client, [ClientType.read, ClientType.root], 'Import');
 
   if (!(await verifyPassword(clientSecret, client.secret))) {
     throw new Error('Import: Invalid client secret');
@@ -269,11 +298,7 @@ export async function validateManageRequest(
     throw new Error('Manage: Client has no secret');
   }
 
-  if (client.type !== ClientType.root) {
-    throw new Error(
-      'Manage: Only root clients are allowed to manage resources'
-    );
-  }
+  assertClientTypeAllowed(client, [ClientType.root], 'Manage');
 
   if (!(await verifyPassword(clientSecret, client.secret))) {
     throw new Error('Manage: Invalid client secret');

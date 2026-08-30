@@ -90,6 +90,14 @@ export default function AddNotificationRule({ rule }: Props) {
   });
 
   const onSubmit: SubmitHandler<IForm> = (data) => {
+    // This modal only builds event- and funnel-shaped rules. Metric alert rules
+    // are a third variant of the same union with no `events` field, and get
+    // their own editor; narrow rather than index blindly.
+    if (!('events' in data.config)) {
+      toast.error('This rule type cannot be edited here');
+      return;
+    }
+
     if (!data.config.events[0]?.name) {
       toast.error('At least one event is required');
       return;

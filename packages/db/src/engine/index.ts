@@ -25,6 +25,31 @@ import type { ConcreteSeries } from './types';
  * Executes the pipeline: normalize -> plan -> fetch -> compute -> format
  */
 export async function executeChart(input: IReportInput): Promise<FinalChart> {
+  // A metrics report runs an entirely different engine — it compiles PromQL and
+  // queries gigapipe instead of building SQL against ClickHouse — but returns
+  // the same FinalChart, so every caller and every renderer downstream is
+  // unaware there are two. See docs/observability/14-decisions.md.
+  if (input.dataSource === 'metrics') {
+    if (!input.metricQuery) {
+      throw new Error('A metrics report requires a metricQuery');
+    }
+
+    const normalizedForDates = await normalize(input);
+    const { executeMetricChart } = await import('./metrics');
+
+    const { chart } = await executeMetricChart({
+      projectId: input.projectId,
+      query: input.metricQuery,
+      interval: normalizedForDates.interval,
+      startDate: normalizedForDates.startDate,
+      endDate: normalizedForDates.endDate,
+      previous: input.previous,
+      name: input.name,
+    });
+
+    return chart;
+  }
+
   // Stage 1: Normalize input
   const normalized = await normalize(input);
 

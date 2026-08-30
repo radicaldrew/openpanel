@@ -25,6 +25,7 @@ import { registerGscPageTools } from './gsc/pages';
 import { registerGscQueryTools } from './gsc/queries';
 import { registerDashboardLinkTools } from './dashboard-links';
 import { registerDashboardManagementTools } from './dashboard-management';
+import { registerTelemetryTools } from './observability/telemetry';
 import { registerProjectTools } from './projects';
 
 export function registerAllTools(
@@ -33,6 +34,10 @@ export function registerAllTools(
 ): void {
   // Project access — always call first to discover available projects
   registerProjectTools(server, context);
+  // Server telemetry. Registered unconditionally; each tool reports clearly
+  // when telemetry is not configured rather than being silently absent, so the
+  // model can say why it cannot answer instead of guessing.
+  registerTelemetryTools(server, context);
   registerDashboardLinkTools(server, context);
   registerDashboardManagementTools(server, context);
   registerReportTools(server, context);

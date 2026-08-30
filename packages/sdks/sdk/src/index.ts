@@ -144,6 +144,48 @@ export class OpenPanel {
     return result;
   }
 
+  /**
+   * Attribute names used to correlate a browser session with server traces.
+   *
+   * NOT `op_session_id`. OpenPanel reserves the whole `op_` prefix in telemetry
+   * attribute names and STRIPS anything matching it at ingest, so an attribute
+   * called `op_session_id` would be silently deleted before it reached storage
+   * and the correlation would simply never work, with no error anywhere.
+   * `openpanel.` is outside the reserved prefix.
+   */
+  static readonly SESSION_ATTRIBUTE = 'openpanel.session.id';
+  static readonly PROFILE_ATTRIBUTE = 'openpanel.profile.id';
+
+  /** Header names the server reads to attach the ids to its own spans. */
+  static readonly SESSION_HEADER = 'x-openpanel-session-id';
+  static readonly PROFILE_HEADER = 'x-openpanel-profile-id';
+
+  /**
+   * Headers to attach to your own API calls so backend spans can be joined to
+   * the browser session that caused them.
+   *
+   *   fetch('/api/checkout', { headers: { ...op.getTelemetryHeaders() } })
+   *
+   * Returns an empty object until a session exists — the first `track()` call
+   * is what establishes one — so it is always safe to spread.
+   *
+   * Only send these to your OWN origin. They identify a visitor, and a
+   * third-party host has no business receiving them.
+   */
+  getTelemetryHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {};
+
+    if (this.sessionId) {
+      headers[OpenPanel.SESSION_HEADER] = String(this.sessionId);
+    }
+
+    if (this.profileId !== undefined && this.profileId !== null) {
+      headers[OpenPanel.PROFILE_HEADER] = String(this.profileId);
+    }
+
+    return headers;
+  }
+
   setGlobalProperties(properties: Record<string, unknown>) {
     this.global = {
       ...this.global,

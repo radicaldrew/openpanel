@@ -1,0 +1,17 @@
+{
+  "name": "@openpanel/gigapipe",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@openpanel/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  },
+  "dependencies": {
+    "@prometheus-io/lezer-promql": "^0.314.0"
+  }
+}

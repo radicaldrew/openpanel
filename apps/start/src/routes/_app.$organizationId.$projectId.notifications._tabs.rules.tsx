@@ -8,7 +8,7 @@ import { pushModal } from '@/modals';
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
 import { AnimatePresence, motion } from 'framer-motion';
-import { PencilRulerIcon, PlusIcon } from 'lucide-react';
+import { ActivityIcon, PencilRulerIcon, PlusIcon } from 'lucide-react';
 import { useMemo } from 'react';
 
 export const Route = createFileRoute(
@@ -63,7 +63,7 @@ function Component() {
 
   return (
     <div>
-      <div className="mb-2">
+      <div className="mb-2 flex gap-2">
         <Button
           icon={PlusIcon}
           variant="outline"
@@ -74,6 +74,16 @@ function Component() {
           }
         >
           Add Rule
+        </Button>
+        {/* Metric alerts get their own editor: they share only a name and the
+            delivery settings with event rules, and the event editor's body is
+            an event picker that has no meaning for a metric threshold. */}
+        <Button
+          icon={ActivityIcon}
+          variant="outline"
+          onClick={() => pushModal('AddMetricAlertRule')}
+        >
+          Add Metric Alert
         </Button>
       </div>
       <div className="col gap-4 w-full grid md:grid-cols-2">

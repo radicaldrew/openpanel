@@ -5,7 +5,11 @@ import { Button } from '@/components/ui/button';
 import { isRealClientSecret } from '@/hooks/use-client-secret';
 import { clipboard } from '@/utils/clipboard';
 
-type Props = { id: string; secret: string; type?: 'read' | 'write' | 'root' };
+type Props = {
+  id: string;
+  secret: string;
+  type?: 'read' | 'write' | 'root' | 'telemetry';
+};
 
 export function CreateClientSuccess({ id, secret, type }: Props) {
   // Only derive credentials from a real secret — the '[CLIENT_SECRET]'
@@ -13,6 +17,11 @@ export function CreateClientSuccess({ id, secret, type }: Props) {
   const hasSecret = isRealClientSecret(secret);
   const mcpToken = hasSecret ? btoa(`${id}:${secret}`) : null;
   const showMcpToken = !!mcpToken && (type === 'root' || type === 'read');
+
+  // A telemetry client authenticates OTLP ingest, not the analytics SDKs, so it
+  // needs the one header an OTel Collector will actually send rather than the
+  // CLIENT_ID / CLIENT_SECRET pair the SDKs use.
+  const isTelemetry = type === 'telemetry';
 
   const credentials = [
     `CLIENT_ID=${id}`,
@@ -38,7 +47,22 @@ export function CreateClientSuccess({ id, secret, type }: Props) {
         <div className="w-full min-w-0">
           <CopyInput label="Secret" value={secret} />
           <p className="mt-1 text-muted-foreground text-sm">
-            You will only need the secret if you want to send server events.
+            {isTelemetry
+              ? 'Store this now — it is not shown again.'
+              : 'You will only need the secret if you want to send server events.'}
+          </p>
+        </div>
+      )}
+      {isTelemetry && hasSecret && (
+        <div className="w-full min-w-0">
+          <CopyInput
+            label="OpenTelemetry Authorization header"
+            value={`Bearer ${id}:${secret}`}
+          />
+          <p className="mt-1 text-muted-foreground text-sm">
+            Set this as the <code>authorization</code> header on your collector's{' '}
+            <code>otlphttp</code> exporter, pointed at{' '}
+            <code>/telemetry/v1/metrics</code>.
           </p>
         </div>
       )}

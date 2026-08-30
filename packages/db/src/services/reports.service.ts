@@ -92,6 +92,11 @@ export function transformReport(
     id: report.id,
     projectId: report.projectId,
     name: report.name || 'Untitled',
+    // Carries the saved report's engine choice through to the chart pipeline.
+    // Existing rows default to 'events' in the database, so nothing changes for
+    // them.
+    dataSource: report.dataSource,
+    metricQuery: report.metricQuery ?? undefined,
     chartType: report.chartType,
     lineType: (report.lineType as IChartLineType) ?? lineTypes.monotone,
     interval: report.interval,

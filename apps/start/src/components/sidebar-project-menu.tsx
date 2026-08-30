@@ -2,6 +2,7 @@ import type { IServiceDashboards } from '@openpanel/db';
 import { useNavigate } from '@tanstack/react-router';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
+  ActivityIcon,
   BellIcon,
   BookOpenIcon,
   Building2Icon,
@@ -15,6 +16,7 @@ import {
   LayoutDashboardIcon,
   LayoutPanelTopIcon,
   PlusIcon,
+  ScrollTextIcon,
   SearchIcon,
   SparklesIcon,
   TargetIcon,
@@ -23,6 +25,7 @@ import {
   UserCircleIcon,
   UsersIcon,
   WallpaperIcon,
+  WaypointsIcon,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { SidebarLink } from './sidebar-link';
@@ -69,6 +72,12 @@ export default function SidebarProjectMenu({
       <SidebarLink href={'/profiles'} icon={UserCircleIcon} label="Profiles" />
       <SidebarLink href={'/groups'} icon={Building2Icon} label="Groups" />
       <SidebarLink href={'/cohorts'} icon={TargetIcon} label="Cohorts" />
+      <div className="mt-4 mb-2 font-medium text-muted-foreground text-sm">
+        Observability
+      </div>
+      <SidebarLink href={'/metrics'} icon={ActivityIcon} label="Metrics" />
+      <SidebarLink href={'/logs'} icon={ScrollTextIcon} label="Logs" />
+      <SidebarLink href={'/traces'} icon={WaypointsIcon} label="Traces" />
       <div className="mt-4 mb-2 font-medium text-muted-foreground text-sm">
         Manage
       </div>

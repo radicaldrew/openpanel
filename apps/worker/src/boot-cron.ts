@@ -74,6 +74,14 @@ export async function bootCron() {
       pattern: 1000 * 10,
     },
     {
+      // Every 60s. The alert state machine's staleness window is derived from
+      // this period, so changing it changes how long a pending timer survives
+      // a gap — see packages/gigapipe/src/alerts/state-machine.ts.
+      name: 'metricAlerts',
+      type: 'metricAlerts',
+      pattern: 1000 * 60,
+    },
+    {
       name: 'insightsDaily',
       type: 'insightsDaily',
       pattern: '0 2 * * *',

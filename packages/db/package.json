@@ -17,6 +17,7 @@
     "@clickhouse/client": "^1.18.5",
     "@openpanel/common": "workspace:*",
     "@openpanel/constants": "workspace:*",
+    "@openpanel/gigapipe": "workspace:*",
     "@openpanel/json": "workspace:*",
     "@openpanel/logger": "workspace:*",
     "@openpanel/payments": "workspace:*",

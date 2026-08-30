@@ -77,6 +77,9 @@ importers:
       simple-git-hooks:
         specifier: ^2.12.1
         version: 2.12.1
+      snappy:
+        specifier: 7.4.2
+        version: 7.4.2
       ultracite:
         specifier: 7.2.0
         version: 7.2.0
@@ -174,6 +177,9 @@ importers:
       '@openpanel/geo':
         specifier: workspace:*
         version: link:../../packages/geo
+      '@openpanel/gigapipe':
+        specifier: workspace:*
+        version: link:../../packages/gigapipe
       '@openpanel/integrations':
         specifier: workspace:^
         version: link:../../packages/integrations
@@ -240,6 +246,9 @@ importers:
       sharp:
         specifier: ^0.33.5
         version: 0.33.5
+      snappy:
+        specifier: 7.4.2
+        version: 7.4.2
       source-map-support:
         specifier: ^0.5.21
         version: 0.5.21
@@ -1009,6 +1018,9 @@ importers:
       '@openpanel/email':
         specifier: workspace:*
         version: link:../../packages/email
+      '@openpanel/gigapipe':
+        specifier: workspace:*
+        version: link:../../packages/gigapipe
       '@openpanel/importer':
         specifier: workspace:*
         version: link:../../packages/importer
@@ -1033,6 +1045,9 @@ importers:
       '@openpanel/redis':
         specifier: workspace:*
         version: link:../../packages/redis
+      '@openpanel/validation':
+        specifier: workspace:*
+        version: link:../../packages/validation
       bullmq:
         specifier: ^5.63.0
         version: 5.63.0(supports-color@10.2.0)
@@ -1256,6 +1271,9 @@ importers:
       '@openpanel/constants':
         specifier: workspace:*
         version: link:../constants
+      '@openpanel/gigapipe':
+        specifier: workspace:*
+        version: link:../gigapipe
       '@openpanel/json':
         specifier: workspace:*
         version: link:../json
@@ -1403,6 +1421,22 @@ importers:
       tar:
         specifier: ^7.4.3
         version: 7.4.3
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
+  packages/gigapipe:
+    dependencies:
+      '@prometheus-io/lezer-promql':
+        specifier: ^0.314.0
+        version: 0.314.0(@lezer/highlight@1.2.3)(@lezer/lr@1.4.7)
+    devDependencies:
+      '@openpanel/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.10.1
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -1558,6 +1592,9 @@ importers:
       '@openpanel/db':
         specifier: workspace:*
         version: link:../db
+      '@openpanel/gigapipe':
+        specifier: workspace:*
+        version: link:../gigapipe
       '@openpanel/logger':
         specifier: workspace:*
         version: link:../logger
@@ -1896,6 +1933,9 @@ importers:
       '@openpanel/email':
         specifier: workspace:*
         version: link:../email
+      '@openpanel/gigapipe':
+        specifier: workspace:*
+        version: link:../gigapipe
       '@openpanel/integrations':
         specifier: workspace:^
         version: link:../integrations
@@ -5223,6 +5263,115 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@napi-rs/snappy-android-arm-eabi@7.4.2':
+    resolution: {integrity: sha512-5Z74BfBXperrqJKG4hmw/nN1LA7UZs5OdUTyZ2cZseZrfcPu4zTQblIzR014pEfhjd2mxm4BzOdQ9TBNCUSJlw==}
+    engines: {node: '>= 10'}
+    cpu: [arm]
+    os: [android]
+
+  '@napi-rs/snappy-android-arm64@7.4.2':
+    resolution: {integrity: sha512-0mDR06aGsAmzxpHubRCLJomWXYc6A0Mn//1huZMg3MrVFhd23xVv0upLYTAtAVSEC3/M3SlqUQLNpZydl9NsiQ==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [android]
+
+  '@napi-rs/snappy-darwin-arm64@7.4.2':
+    resolution: {integrity: sha512-QNfdjRsGT1YIQ7t+IzIOdGSXrZNNsoovKiFJL4cOD9+2AYWPJQgt8xYMUGihz9nWtWUB4d3nRaYXGSMrSjzguQ==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@napi-rs/snappy-darwin-x64@7.4.2':
+    resolution: {integrity: sha512-TOrxHMfAYkmUOCy6mv0I5NT7h6TRh5aorp8b8RUG9eGlh74RnbU+1IpjhI59L4fq5m+uX8Q9ViCfEM14SO5OPw==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [darwin]
+
+  '@napi-rs/snappy-freebsd-x64@7.4.2':
+    resolution: {integrity: sha512-tZ6Nw5P/+ELsamWioFhATLgSlzKBEh/jxSVCxOVR/Q1PylD5GwT1InSVftJ/8G91okvVOmeof1zjc9xTBfgXZg==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [freebsd]
+
+  '@napi-rs/snappy-linux-arm-gnueabihf@7.4.2':
+    resolution: {integrity: sha512-TNc+bw2rH0YT0me9D7VYRyvQr6E0fZlUa/MCZG4KPd0k+DjQjZucoxRIg7Kss/7ILaVYUfhN1DT+c1znK0ZFZQ==}
+    engines: {node: '>= 10'}
+    cpu: [arm]
+    os: [linux]
+
+  '@napi-rs/snappy-linux-arm64-gnu@7.4.2':
+    resolution: {integrity: sha512-+3CJI7f43w09nkjt2+kJI5LAi+p7Qw63t5/RaRyEqRku5MChwBTUs2RMN5OsKdFrHkGdMPkHJWq5AvlvADiysA==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@napi-rs/snappy-linux-arm64-musl@7.4.2':
+    resolution: {integrity: sha512-GdNIKqTepX3ZO20DgTb5sN1TlDPHBcfPe9pE8uORKfggTO07tzkxyzbisp6EGQqS3FUtkf+UJdI2ac2kCC9SEQ==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@napi-rs/snappy-linux-ppc64-gnu@7.4.2':
+    resolution: {integrity: sha512-vF0sv6nNSeWd3Vl0KPR9BYl7ByI/JoheYEb8ymEO4vkkB5wY8XUrIrt9+jJ++Ic4U5QBnIrKoqATWYUU5PNwog==}
+    engines: {node: '>= 10'}
+    cpu: [ppc64]
+    os: [linux]
+    libc: [glibc]
+
+  '@napi-rs/snappy-linux-riscv64-gnu@7.4.2':
+    resolution: {integrity: sha512-LIWbSAfYhhkLG2sypR2boISfH598Gt/ctyH6SiJqxCvHxQgtLXqgMOTuyixPA4wa7uNFXcpG6AU05pQuGsQUvw==}
+    engines: {node: '>= 10'}
+    cpu: [riscv64]
+    os: [linux]
+    libc: [glibc]
+
+  '@napi-rs/snappy-linux-s390x-gnu@7.4.2':
+    resolution: {integrity: sha512-nljpLVhSeNDvgO+3tOGZtTv/W2+XHfpZ0t/d8nfpoC9NalRh2e5Fsmi7ukMjqU/yMSbUqDgCHC5nYZ0ivkaBVw==}
+    engines: {node: '>= 10'}
+    cpu: [s390x]
+    os: [linux]
+    libc: [glibc]
+
+  '@napi-rs/snappy-linux-x64-gnu@7.4.2':
+    resolution: {integrity: sha512-MTv4Uv0Fpr5p4yih39NjsjE3Oy1Dzp3q17NbyqQpSX9tQcD/PNA5yb9ADqmoXpmINM9jpIFuLszzfs7254U6Yg==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@napi-rs/snappy-linux-x64-musl@7.4.2':
+    resolution: {integrity: sha512-BMRBwRpHOwaPw1OzaDERWG4VnOGFHwdxd/8KiANaZx64dISONIaYAFtPKBYVGXikqYcvyp5WgLcp90d+Lu7/Xw==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  '@napi-rs/snappy-openharmony-arm64@7.4.2':
+    resolution: {integrity: sha512-quGOiGkQAJN1+oIMVliCK2u4j62ob88K1P7/tL6ffAeypmy4DQFrGEkzQ9kbnZtxkGhIk7MR8+6kIjtUcJQkcg==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [openharmony]
+
+  '@napi-rs/snappy-win32-arm64-msvc@7.4.2':
+    resolution: {integrity: sha512-W+VHhwyWeeht8hVwa8eB49tgALsJLj3S+R51BCdNMmofJNJnWOet9j786RQoZ+NfZk4jGP6sxiVMb9jLnnkPlQ==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [win32]
+
+  '@napi-rs/snappy-win32-ia32-msvc@7.4.2':
+    resolution: {integrity: sha512-KalsOkZEurI5ti/20xWt84aLnBUqFBDuuvvkATw5G/D9FaqmOqpLGcvLROL55bdL49/wRCh1OZpVpqKS7x+g/Q==}
+    engines: {node: '>= 10'}
+    cpu: [ia32]
+    os: [win32]
+
+  '@napi-rs/snappy-win32-x64-msvc@7.4.2':
+    resolution: {integrity: sha512-D2BZ0utRz/Nqxa01mZHe9EhVJoCG77w4sqRzdzBCXDgAwszcCmnGIw0wKc+iHmdA9wfIryok9KNArtP8ZJZO9g==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [win32]
+
   '@napi-rs/wasm-runtime@0.2.5':
     resolution: {integrity: sha512-kwUxR7J9WLutBbulqg1dfOrMTwhMdXLdcGUhcbCcGwnPLt3gz19uHVdwH1syKVDbE022ZS2vZxOWflFLS0YTjw==}
 
@@ -6933,6 +7082,12 @@ packages:
     resolution: {integrity: sha512-mrZOev24EDhnefmnZX7WVVT7v+r9LttPRqf54ONvj6re4XMF7wFTpK2tLJi4XHB7fFp/6xhYbgRel8YV7gQiyA==}
     peerDependencies:
       '@opentelemetry/api': ^1.8
+
+  '@prometheus-io/lezer-promql@0.314.0':
+    resolution: {integrity: sha512-UAacz1+s6fY5Mh7LEFJ76Ywno/jFLwpuHgZPFi7QBKosHdolxqpybbK11LNd8OXDDQNdoSlcKsohz913GbFNWw==}
+    peerDependencies:
+      '@lezer/highlight': ^1.1.2
+      '@lezer/lr': ^1.2.3
 
   '@protobufjs/aspromise@1.1.2':
     resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
@@ -17529,6 +17684,10 @@ packages:
     resolution: {integrity: sha512-dWUG8F5sIIARXih1DTaQAX4SsiTXhInKf1buxdY9DIg4ZYPZK5nGM1VRIYmEbDbsHt7USo99xSLFu5Q1IqTmsg==}
     engines: {node: '>= 18'}
 
+  snappy@7.4.2:
+    resolution: {integrity: sha512-ApyCoX5QnrGpMJ/MVaZOo3GRDLTFpEDC6SnFJkwSaMvF6sTAuj3fTLq9o9tLgcz1/ealV7sMI2SgW3bZvZD1pA==}
+    engines: {node: '>= 10'}
+
   socket.io-adapter@2.5.5:
     resolution: {integrity: sha512-eLDQas5dzPgOWCk9GuuJC2lBqItuhKI4uxGgo9aIV7MYbk2h9Q6uULEh8WBzThoI7l+qU9Ast9fVUmkqPP9wYg==}
 
@@ -24456,6 +24615,57 @@ snapshots:
   '@msgpackr-extract/msgpackr-extract-win32-x64@3.0.2':
     optional: true
 
+  '@napi-rs/snappy-android-arm-eabi@7.4.2':
+    optional: true
+
+  '@napi-rs/snappy-android-arm64@7.4.2':
+    optional: true
+
+  '@napi-rs/snappy-darwin-arm64@7.4.2':
+    optional: true
+
+  '@napi-rs/snappy-darwin-x64@7.4.2':
+    optional: true
+
+  '@napi-rs/snappy-freebsd-x64@7.4.2':
+    optional: true
+
+  '@napi-rs/snappy-linux-arm-gnueabihf@7.4.2':
+    optional: true
+
+  '@napi-rs/snappy-linux-arm64-gnu@7.4.2':
+    optional: true
+
+  '@napi-rs/snappy-linux-arm64-musl@7.4.2':
+    optional: true
+
+  '@napi-rs/snappy-linux-ppc64-gnu@7.4.2':
+    optional: true
+
+  '@napi-rs/snappy-linux-riscv64-gnu@7.4.2':
+    optional: true
+
+  '@napi-rs/snappy-linux-s390x-gnu@7.4.2':
+    optional: true
+
+  '@napi-rs/snappy-linux-x64-gnu@7.4.2':
+    optional: true
+
+  '@napi-rs/snappy-linux-x64-musl@7.4.2':
+    optional: true
+
+  '@napi-rs/snappy-openharmony-arm64@7.4.2':
+    optional: true
+
+  '@napi-rs/snappy-win32-arm64-msvc@7.4.2':
+    optional: true
+
+  '@napi-rs/snappy-win32-ia32-msvc@7.4.2':
+    optional: true
+
+  '@napi-rs/snappy-win32-x64-msvc@7.4.2':
+    optional: true
+
   '@napi-rs/wasm-runtime@0.2.5':
     dependencies:
       '@emnapi/core': 1.3.1
@@ -26385,6 +26595,11 @@ snapshots:
       '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.0)(supports-color@10.2.0)
     transitivePeerDependencies:
       - supports-color
+
+  '@prometheus-io/lezer-promql@0.314.0(@lezer/highlight@1.2.3)(@lezer/lr@1.4.7)':
+    dependencies:
+      '@lezer/highlight': 1.2.3
+      '@lezer/lr': 1.4.7
 
   '@protobufjs/aspromise@1.1.2': {}
 
@@ -39965,6 +40180,26 @@ snapshots:
   smob@1.5.0: {}
 
   smol-toml@1.6.1: {}
+
+  snappy@7.4.2:
+    optionalDependencies:
+      '@napi-rs/snappy-android-arm-eabi': 7.4.2
+      '@napi-rs/snappy-android-arm64': 7.4.2
+      '@napi-rs/snappy-darwin-arm64': 7.4.2
+      '@napi-rs/snappy-darwin-x64': 7.4.2
+      '@napi-rs/snappy-freebsd-x64': 7.4.2
+      '@napi-rs/snappy-linux-arm-gnueabihf': 7.4.2
+      '@napi-rs/snappy-linux-arm64-gnu': 7.4.2
+      '@napi-rs/snappy-linux-arm64-musl': 7.4.2
+      '@napi-rs/snappy-linux-ppc64-gnu': 7.4.2
+      '@napi-rs/snappy-linux-riscv64-gnu': 7.4.2
+      '@napi-rs/snappy-linux-s390x-gnu': 7.4.2
+      '@napi-rs/snappy-linux-x64-gnu': 7.4.2
+      '@napi-rs/snappy-linux-x64-musl': 7.4.2
+      '@napi-rs/snappy-openharmony-arm64': 7.4.2
+      '@napi-rs/snappy-win32-arm64-msvc': 7.4.2
+      '@napi-rs/snappy-win32-ia32-msvc': 7.4.2
+      '@napi-rs/snappy-win32-x64-msvc': 7.4.2
 
   socket.io-adapter@2.5.5(supports-color@10.2.0):
     dependencies:

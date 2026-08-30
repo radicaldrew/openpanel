@@ -55,7 +55,10 @@ export const clientRouter = createTRPCRouter({
         name: z.string(),
         projectId: z.string(),
         organizationId: z.string(),
-        type: z.enum(['read', 'write', 'root']).optional(),
+        // `telemetry` clients authenticate OTLP ingest only — every other
+        // validator in apps/api allow-lists the types it accepts, so this value
+        // grants nothing else.
+        type: z.enum(['read', 'write', 'root', 'telemetry']).optional(),
       }),
     )
     .mutation(async ({ input, ctx }) => {

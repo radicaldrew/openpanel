@@ -5,6 +5,7 @@ import AddDashboard from './add-dashboard';
 import AddGroup from './add-group';
 import AddImport from './add-import';
 import AddIntegration from './add-integration';
+import AddMetricAlertRule from './add-metric-alert-rule';
 import AddNotificationRule from './add-notification-rule';
 import AddProject from './add-project';
 import AddReference from './add-reference';
@@ -48,6 +49,7 @@ import { op } from '@/utils/op';
 
 const modals = {
   PageDetails,
+  AddMetricAlertRule,
   AddGroup,
   EditGroup,
   AddCohort,

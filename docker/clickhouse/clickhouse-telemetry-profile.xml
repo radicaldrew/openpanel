@@ -1,0 +1,70 @@
+<!--
+  Settings profile and quota for the gigapipe (telemetry) ClickHouse user.
+
+  gigapipe and OpenPanel share one ClickHouse server
+  (docs/observability/14-decisions.md D1), so a telemetry query and a query
+  serving the analytics product contend for the same CPU, memory and disk.
+
+  This has to be enforced server-side. gigapipe's reader builds its ClickHouse
+  connection options with `Settings: nil` — no max_memory_usage, no
+  max_execution_time, no max_rows_to_read — and exposes no configuration to
+  change that. So the limits cannot come from gigapipe; they have to be
+  attached to the user it connects as. See D3.
+
+  The numbers below are deliberate starting points, not tuned values. Raise
+  them when a legitimate query is refused; do not raise them to make an
+  expensive dashboard work — clamp the query instead.
+-->
+<clickhouse>
+    <profiles>
+        <telemetry>
+            <!-- A single telemetry query may not take more than 8 GiB. The
+                 analytics workload is the one that must survive. -->
+            <max_memory_usage>8589934592</max_memory_usage>
+
+            <!-- gigapipe's own PromQL engine has a hardcoded 30s timeout, so
+                 anything past 60s here is a query that already gave up
+                 upstream, or an insert that is in trouble. -->
+            <max_execution_time>60</max_execution_time>
+            <timeout_overflow_mode>throw</timeout_overflow_mode>
+
+            <!-- Caps an unbounded scan before it evicts the page cache the
+                 analytics tables depend on. -->
+            <max_bytes_to_read>214748364800</max_bytes_to_read>
+            <read_overflow_mode>throw</read_overflow_mode>
+
+            <!-- A read that returns this much is a bug or an export, not a
+                 chart. -->
+            <max_result_rows>5000000</max_result_rows>
+            <max_result_bytes>1073741824</max_result_bytes>
+            <result_overflow_mode>throw</result_overflow_mode>
+
+            <!-- Bounded concurrency: telemetry cannot occupy every slot. -->
+            <max_threads>8</max_threads>
+
+            <!-- gigapipe writes, so this user is not readonly. -->
+            <readonly>0</readonly>
+
+            <log_queries>0</log_queries>
+            <log_query_threads>0</log_query_threads>
+        </telemetry>
+    </profiles>
+
+    <quotas>
+        <telemetry>
+            <interval>
+                <duration>3600</duration>
+                <queries>0</queries>
+                <errors>0</errors>
+                <result_rows>0</result_rows>
+                <read_rows>0</read_rows>
+                <!-- One hour of CPU per wall-clock hour across all telemetry
+                     queries. A runaway dashboard hits this and stops; the
+                     analytics product keeps serving. 0 above means unlimited
+                     for that dimension — execution_time is the one that
+                     actually protects the shared server. -->
+                <execution_time>3600</execution_time>
+            </interval>
+        </telemetry>
+    </quotas>
+</clickhouse>

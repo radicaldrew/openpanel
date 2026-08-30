@@ -229,9 +229,82 @@ export type IWidgetOptions = z.infer<typeof zWidgetOptions>;
 export type ICounterWidgetOptions = z.infer<typeof zCounterWidgetOptions>;
 export type IRealtimeWidgetOptions = z.infer<typeof zRealtimeWidgetOptions>;
 
+export const zMetricMatcher = z.object({
+  name: z.string().min(1).max(200),
+  operator: z.enum(['eq', 'neq', 'match', 'notMatch']),
+  value: z.string().max(2000),
+});
+
+/**
+ * A server-metric query. Structured, never raw PromQL — the compiler is the
+ * only emitter of a selector, which is what makes the tenancy matcher
+ * unforgeable. See docs/observability/01-tenancy-and-security.md.
+ */
+export const zMetricQuery = z.object({
+  metric: z.string().min(1).max(200),
+  matchers: z.array(zMetricMatcher).max(20).default([]),
+  fn: z.enum(['rate', 'increase', 'delta', 'raw']).default('rate'),
+  aggregation: z
+    .enum(['sum', 'avg', 'min', 'max', 'count', 'p50', 'p90', 'p95', 'p99'])
+    .default('sum'),
+  groupBy: z.array(z.string().max(200)).max(5).default([]),
+  window: z.string().max(20).optional(),
+});
+
+export type IMetricQuery = z.infer<typeof zMetricQuery>;
+
+/**
+ * A saved log or trace search.
+ *
+ * Structured, not a raw LogQL string: the compiler is the only thing permitted
+ * to emit a selector, and a saved raw query would be a stored string that later
+ * gets compiled — exactly the shape the tenancy design avoids.
+ */
+export const zSavedTelemetryQuery = z.object({
+  matchers: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(200),
+        operator: z.enum(['eq', 'neq', 'match', 'notMatch']),
+        value: z.string().max(2000),
+      }),
+    )
+    .max(10)
+    .default([]),
+  lineFilters: z
+    .array(
+      z.object({
+        operator: z.enum(['contains', 'notContains', 'match', 'notMatch']),
+        value: z.string().min(1).max(1000),
+      }),
+    )
+    .max(5)
+    .default([]),
+  service: z.string().max(200).optional(),
+  minDurationMs: z.number().min(0).optional(),
+});
+
+export type ISavedTelemetryQuery = z.infer<typeof zSavedTelemetryQuery>;
+
+export const zReportDataSource = z.enum(['events', 'metrics']);
+export type IReportDataSource = z.infer<typeof zReportDataSource>;
+
 // Base input schema - for API calls, engine, chart queries
 export const zReportInput = z.object({
   projectId: z.string().describe('The ID of the project this chart belongs to'),
+  // Optional rather than `.default('events')`. A default makes the OUTPUT type
+  // required, which would force every existing caller that builds a report
+  // object — dozens of them across the dashboard — to spell out a field that
+  // only metric reports care about. The engine checks for `'metrics'`
+  // explicitly, so absence already means events.
+  dataSource: zReportDataSource
+    .optional()
+    .describe(
+      'Where the data comes from: OpenPanel analytics events (default), or server telemetry metrics',
+    ),
+  metricQuery: zMetricQuery
+    .optional()
+    .describe('The metric query, required when dataSource is "metrics"'),
   chartType: zChartType
     .default('linear')
     .describe('What type of chart should be displayed'),
@@ -523,9 +596,33 @@ export type INotificationRuleFunnelConfig = z.infer<
   typeof zNotificationRuleFunnelConfig
 >;
 
+/**
+ * A threshold alert on a server metric.
+ *
+ * gigapipe's ruler evaluates RECORDING rules only — alerting rules may be
+ * stored but are never evaluated — so OpenPanel owns evaluation. Delivery
+ * reuses the existing NotificationRule -> Notification -> integrations path
+ * unchanged; only the evaluation and the state machine are new.
+ */
+export const zNotificationRuleMetricConfig = z.object({
+  type: z.literal('metric'),
+  query: zMetricQuery,
+  operator: z.enum(['gt', 'gte', 'lt', 'lte']),
+  threshold: z.number(),
+  /** How long the condition must hold before firing. */
+  forSeconds: z.number().int().min(0).max(86_400).default(300),
+  /** Minimum gap between notifications for the same series. */
+  cooldownSeconds: z.number().int().min(60).max(86_400).default(1800),
+});
+
+export type INotificationRuleMetricConfig = z.infer<
+  typeof zNotificationRuleMetricConfig
+>;
+
 export const zNotificationRuleConfig = z.discriminatedUnion('type', [
   zNotificationRuleEventConfig,
   zNotificationRuleFunnelConfig,
+  zNotificationRuleMetricConfig,
 ]);
 
 export type INotificationRuleConfig = z.infer<typeof zNotificationRuleConfig>;

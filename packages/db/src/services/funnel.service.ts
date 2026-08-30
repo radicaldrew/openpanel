@@ -616,6 +616,8 @@ export async function getFunnelCore(input: {
 
   const result = await funnelService.getFunnel({
     projectId: input.projectId,
+    // A funnel is always an event query — there is no metrics equivalent.
+    dataSource: 'events' as const,
     startDate: input.startDate,
     endDate: input.endDate,
     series: eventSeries,

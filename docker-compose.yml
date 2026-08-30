@@ -28,10 +28,14 @@ services:
       - ./docker/data/op-ch-data:/var/lib/clickhouse
       - ./docker/clickhouse/clickhouse-config.xml:/etc/clickhouse-server/config.d/op-config.xml
       - ./docker/clickhouse/clickhouse-user-config.xml:/etc/clickhouse-server/users.d/op-user-config.xml
+      - ./docker/clickhouse/clickhouse-telemetry-profile.xml:/etc/clickhouse-server/users.d/op-telemetry-profile.xml:ro
       - ./docker/clickhouse/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
     environment:
       CLICKHOUSE_DB: openpanel
       CLICKHOUSE_SKIP_USER_SETUP: 1
+      # Read by docker/clickhouse/init-db.sh on first boot.
+      CLICKHOUSE_TELEMETRY_DB: openpanel_telemetry
+      CLICKHOUSE_TELEMETRY_PASSWORD: gigapipe
     ulimits:
       nofile:
         soft: 262144
@@ -40,6 +44,29 @@ services:
       - "8123:8123" # HTTP interface
       - "9000:9000" # Native/TCP interface
       - "9009:9009" # Inter-server communication
+
+  op-gigapipe:
+    image: ${GIGAPIPE_IMAGE:-ghcr.io/metrico/gigapipe:latest}
+    restart: always
+    depends_on:
+      - op-ch
+    environment:
+      CLICKHOUSE_SERVER: op-ch
+      CLICKHOUSE_PORT: 9000
+      CLICKHOUSE_DB: openpanel_telemetry
+      CLICKHOUSE_AUTH: gigapipe:gigapipe
+      # Auth stays on in dev too — gigapipe only installs the middleware when
+      # both are non-empty, and dev is where you would notice it missing.
+      QRYN_LOGIN: openpanel
+      QRYN_PASSWORD: openpanel-dev
+      ADVANCED_OMIT_EMPTY_VALUES: "true"
+      LOG_DRILLDOWN: "true"
+      SAMPLES_DAYS: "30"
+      PORT: 3100
+    ports:
+      # Published here, unlike self-hosting: in dev the apps run on the host
+      # via `pnpm dev`, not on the compose network.
+      - "3100:3100"
 
   op-rp:
     image: redpandadata/redpanda:v25.1.4

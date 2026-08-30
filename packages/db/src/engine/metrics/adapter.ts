@@ -1,0 +1,202 @@
+import { PROJECT_LABEL } from '@openpanel/gigapipe';
+import { formatClickhouseDate } from '../../clickhouse/client';
+import type { ConcreteSeries } from '../types';
+
+/**
+ * Turn a Prometheus matrix response into the shape OpenPanel's chart pipeline
+ * already speaks.
+ *
+ * This adapter is the highest-leverage piece of the metrics work. The existing
+ * `format()` stage converts `ConcreteSeries[]` into `FinalChart`, and every
+ * visual surface in the product consumes `FinalChart` — the chart renderers,
+ * dashboards and their grid layout, public share links, embed widgets, the MCP
+ * report tools. Producing `ConcreteSeries` here means a metric report is an
+ * ordinary report everywhere downstream, rather than a parallel rendering path
+ * that has to be kept in sync forever.
+ *
+ * What it deliberately does NOT do is invent event-shaped context. A metric
+ * series has no `event` and no profile drill-down, so `context.event` stays
+ * undefined and `filters` stays empty; the UI already treats those as optional,
+ * and faking them would make "view these users" offer something that cannot
+ * work.
+ */
+
+/** A single series in a Prometheus `matrix` result. */
+export interface PromMatrixSeries {
+  metric: Record<string, string>;
+  /** `[unixSeconds, "value"]`, value as a string per the Prometheus wire format. */
+  values: [number, string][];
+}
+
+export interface PromMatrixResponse {
+  status: string;
+  data?: {
+    resultType?: string;
+    result?: PromMatrixSeries[];
+  };
+}
+
+export class MetricsResponseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'MetricsResponseError';
+  }
+}
+
+/**
+ * Build the display name for one series.
+ *
+ * With group-by labels present, the name is their values — `["/checkout"]` —
+ * which matches how an event report names a breakdown series. With none, the
+ * metric name is the only meaningful label.
+ */
+function seriesName(
+  labels: Record<string, string>,
+  groupBy: string[],
+  metricName: string,
+): string[] {
+  const parts = groupBy
+    .filter((label) => label !== PROJECT_LABEL)
+    .map((label) => labels[label])
+    .filter((value): value is string => value !== undefined && value !== '');
+
+  if (parts.length > 0) {
+    return parts;
+  }
+
+  // The compiled `by (...)` normally guarantees the response carries only the
+  // grouped labels, so the branch above answers it. But if a response ever
+  // arrives with distinguishing labels the query did not group by, naming every
+  // series after the metric would render several identically-labelled lines
+  // that the user cannot tell apart. Fall back to whatever actually
+  // distinguishes them before falling back to the metric name.
+  const distinguishing = Object.entries(labels)
+    .filter(([key]) => key !== PROJECT_LABEL && key !== '__name__')
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, value]) => value)
+    .filter((value) => value !== '');
+
+  return distinguishing.length > 0 ? distinguishing : [metricName];
+}
+
+/**
+ * Everything except the project label becomes a breakdown.
+ *
+ * The project label is stripped because it is infrastructure, not data: it is
+ * the same for every series in the response (the compiler guarantees it), so
+ * surfacing it would add a constant column to every chart legend and leak an
+ * internal identifier into a user-facing label.
+ */
+function breakdownsOf(labels: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(labels)) {
+    if (key === PROJECT_LABEL || key === '__name__') {
+      continue;
+    }
+    out[key] = value;
+  }
+
+  return out;
+}
+
+/**
+ * A stable id for a series, so React keys and colour assignment survive a
+ * refetch. Derived from the label set rather than the array index, which
+ * reorders whenever a series appears or disappears.
+ */
+function seriesId(labels: Record<string, string>): string {
+  const parts = Object.entries(labels)
+    .filter(([key]) => key !== PROJECT_LABEL)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${value}`);
+
+  return parts.join(',') || 'series';
+}
+
+export interface AdaptOptions {
+  /** Group-by labels from the compiled query, project label first. */
+  groupBy: string[];
+  /** Metric name, used when there is nothing to name a series by. */
+  metricName: string;
+  /**
+   * Every bucket the chart expects, as `formatClickhouseDate` strings.
+   *
+   * Prometheus omits steps with no data, while the chart renderers expect a
+   * dense series — a missing bucket shifts every later point left and silently
+   * misdates the whole line. Passing the expected grid makes the gaps explicit.
+   */
+  buckets?: string[];
+}
+
+/**
+ * Convert a matrix response into `ConcreteSeries[]`.
+ *
+ * Values arrive as strings and may be `NaN` (Prometheus renders a missing
+ * quantile that way). `NaN` becomes a gap rather than a zero: zero is a real
+ * measurement and drawing one where the backend said "no data" invents a fact.
+ */
+export function adaptMatrixToConcreteSeries(
+  response: PromMatrixResponse,
+  options: AdaptOptions,
+): ConcreteSeries[] {
+  if (response.status !== 'success') {
+    throw new MetricsResponseError(
+      `Telemetry backend returned status ${response.status}`,
+    );
+  }
+
+  const resultType = response.data?.resultType;
+  if (resultType && resultType !== 'matrix') {
+    throw new MetricsResponseError(
+      `Expected a matrix result, got ${resultType}`,
+    );
+  }
+
+  const result = response.data?.result ?? [];
+
+  return result.map((series, index) => {
+    const labels = series.metric ?? {};
+
+    const byDate = new Map<string, number>();
+    for (const [unixSeconds, raw] of series.values ?? []) {
+      const value = Number.parseFloat(raw);
+      if (Number.isNaN(value)) {
+        continue;
+      }
+      byDate.set(formatClickhouseDate(new Date(unixSeconds * 1000)), value);
+    }
+
+    const dates = options.buckets ?? [...byDate.keys()].sort();
+
+    return {
+      id: seriesId(labels),
+      definitionId: 'metric',
+      definitionIndex: 0,
+      name: seriesName(labels, options.groupBy, options.metricName),
+      context: {
+        // No event and no filters: a metric series has no profile drill-down,
+        // and pretending otherwise would offer a "view these users" action that
+        // cannot be answered.
+        filters: [],
+        breakdowns: breakdownsOf(labels),
+      },
+      data: dates.map((date) => ({
+        date,
+        count: byDate.get(date) ?? 0,
+      })),
+      definition: {
+        id: 'metric',
+        type: 'event',
+        name: options.metricName,
+        // NO displayName. format() splices a definition's displayName over the
+        // first element of every series name (format.ts:67-68), which is right
+        // for an event report where the user named the series — and wrong here,
+        // where it would overwrite each series' distinguishing label value and
+        // render every line in the legend under the same metric name.
+        segment: 'event',
+        filters: [],
+      } as unknown as ConcreteSeries['definition'],
+    } satisfies ConcreteSeries;
+  });
+}

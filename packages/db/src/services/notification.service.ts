@@ -374,8 +374,20 @@ export async function checkNotificationRulesForEvent(
   );
 }
 
-const isFunnelRule = (rule: INotificationRuleCached) =>
-  rule.config.type === 'funnel';
+/**
+ * A type predicate, not a plain boolean.
+ *
+ * `.filter()` only narrows when the callback is a predicate. Without it the
+ * filtered array keeps the full config union, and every access to
+ * `rule.config.events` below is unchecked — which compiled only for as long as
+ * every variant happened to have an `events` field. Adding the `metric` variant
+ * made that assumption visible.
+ */
+const isFunnelRule = (
+  rule: INotificationRuleCached,
+): rule is INotificationRuleCached & {
+  config: Extract<INotificationRuleCached['config'], { type: 'funnel' }>;
+} => rule.config.type === 'funnel';
 
 export function getHasFunnelRules(rules: INotificationRuleCached[]) {
   return rules.some(isFunnelRule);

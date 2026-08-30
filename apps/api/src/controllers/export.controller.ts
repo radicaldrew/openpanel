@@ -200,6 +200,10 @@ export async function charts(
 
   return ChartEngine.execute({
     ...rest,
+    // The public export API serves analytics events only. Telemetry metrics are
+    // read through the authenticated observability router, which enforces
+    // project access per request.
+    dataSource: 'events' as const,
     startDate: rest.startDate
       ? DateTime.fromISO(rest.startDate)
           .setZone(timezone)

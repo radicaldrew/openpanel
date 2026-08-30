@@ -13,6 +13,14 @@ let envs = {
   COOKIE_SECRET: generatePassword(32),
   RESEND_API_KEY: '',
   EMAIL_SENDER: '',
+  // Telemetry (gigapipe). Generated, never prompted — the operator has no
+  // reason to choose these, and an empty value here is a silently
+  // unauthenticated gigapipe, so the compose file refuses to start without
+  // them. Empty lines are stripped from .env below, which is what turns a
+  // generation failure into a loud compose error rather than a quiet one.
+  CLICKHOUSE_TELEMETRY_PASSWORD: generatePassword(32),
+  GIGAPIPE_USER: 'openpanel',
+  GIGAPIPE_PASSWORD: generatePassword(32),
 };
 
 type EnvVars = typeof envs;
@@ -152,7 +160,13 @@ function writeEnvFile(envs: EnvVars) {
     .replace('$DASHBOARD_URL', stripTrailingSlash(envs.DOMAIN_NAME))
     .replace('$API_URL', `${stripTrailingSlash(envs.DOMAIN_NAME)}/api`)
     .replace('$RESEND_API_KEY', envs.RESEND_API_KEY)
-    .replace('$EMAIL_SENDER', envs.EMAIL_SENDER);
+    .replace('$EMAIL_SENDER', envs.EMAIL_SENDER)
+    .replace(
+      '$CLICKHOUSE_TELEMETRY_PASSWORD',
+      envs.CLICKHOUSE_TELEMETRY_PASSWORD,
+    )
+    .replace('$GIGAPIPE_USER', envs.GIGAPIPE_USER)
+    .replace('$GIGAPIPE_PASSWORD', envs.GIGAPIPE_PASSWORD);
 
   fs.writeFileSync(
     envPath,

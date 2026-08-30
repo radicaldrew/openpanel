@@ -19,6 +19,7 @@ import { overviewRouter } from './routers/overview';
 import { profileRouter } from './routers/profile';
 import { projectRouter } from './routers/project';
 import { realtimeRouter } from './routers/realtime';
+import { observabilityRouter } from './routers/observability';
 import { referenceRouter } from './routers/reference';
 import { reportRouter } from './routers/report';
 import { sessionRouter } from './routers/session';
@@ -45,6 +46,7 @@ export const appRouter = createTRPCRouter({
   session: sessionRouter,
   share: shareRouter,
   onboarding: onboardingRouter,
+  observability: observabilityRouter,
   reference: referenceRouter,
   notification: notificationRouter,
   integration: integrationRouter,
