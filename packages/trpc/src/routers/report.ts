@@ -1,12 +1,13 @@
 import { z } from 'zod';
 
 import {
+  Prisma,
   db,
   getDashboardById,
   getReportById,
   getReportsByDashboardId,
 } from '@openpanel/db';
-import { zReport } from '@openpanel/validation';
+import { refineReportDataSource, zReport } from '@openpanel/validation';
 
 import { getProjectAccess, requireProjectAccess } from '../access';
 import {
@@ -34,7 +35,9 @@ export const reportRouter = createTRPCRouter({
   create: protectedProcedure
     .input(
       z.object({
-        report: zReport.omit({ projectId: true }),
+        report: zReport
+          .omit({ projectId: true })
+          .superRefine(refineReportDataSource),
         dashboardId: z.string(),
       }),
     )
@@ -56,6 +59,13 @@ export const reportRouter = createTRPCRouter({
           projectId: dashboard.projectId,
           dashboardId,
           name: report.name,
+          // Without these two a metric report is stored as an events report
+          // with an empty series — a panel that renders nothing and reports no
+          // error. `Prisma.DbNull` rather than `undefined`: for a Json column
+          // undefined means "leave alone", which on update would strand a query
+          // on a report that is no longer a metric one.
+          dataSource: report.dataSource ?? 'events',
+          metricQuery: report.metricQuery ?? Prisma.DbNull,
           events: report.series,
           globalFilters: report.globalFilters ?? [],
           interval: report.interval,
@@ -78,7 +88,9 @@ export const reportRouter = createTRPCRouter({
     .input(
       z.object({
         reportId: z.string(),
-        report: zReport.omit({ projectId: true }),
+        report: zReport
+          .omit({ projectId: true })
+          .superRefine(refineReportDataSource),
       }),
     )
     .mutation(async ({ input: { report, reportId }, ctx }) => {
@@ -100,6 +112,10 @@ export const reportRouter = createTRPCRouter({
         },
         data: {
           name: report.name,
+          // Carried on update too: editing a metric panel and saving it must
+          // not quietly turn it back into an events report.
+          dataSource: report.dataSource ?? 'events',
+          metricQuery: report.metricQuery ?? Prisma.DbNull,
           events: report.series,
           globalFilters: report.globalFilters ?? [],
           interval: report.interval,

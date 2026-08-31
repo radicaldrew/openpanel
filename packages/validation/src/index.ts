@@ -382,6 +382,43 @@ export const zReportInput = z.object({
 });
 
 // Complete report schema - for saved reports
+/**
+ * A report's data source and its metric query have to agree.
+ *
+ * Enforced as a standalone refinement rather than on `zReport` itself because
+ * refining a schema turns it into a ZodEffects, and the report routes call
+ * `.omit({ projectId: true })` on it — which only a ZodObject has. Callers
+ * apply this after their own `.omit`/`.extend`.
+ *
+ * WHY IT IS WORTH ENFORCING
+ *
+ * Neither half is meaningful alone, and neither failure announces itself. A
+ * report marked `metrics` with no query reaches the metrics engine with nothing
+ * to run; a query on an `events` report is never looked at. Both render an
+ * empty panel with no error, which is exactly how `report.create` silently
+ * dropping these two fields went unnoticed.
+ */
+export const refineReportDataSource = (
+  report: { dataSource?: IReportDataSource; metricQuery?: unknown },
+  ctx: z.RefinementCtx,
+) => {
+  if (report.dataSource === 'metrics' && !report.metricQuery) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['metricQuery'],
+      message: 'A metrics report needs a metricQuery',
+    });
+  }
+
+  if (report.metricQuery && report.dataSource !== 'metrics') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['dataSource'],
+      message: 'A metricQuery is only meaningful when dataSource is "metrics"',
+    });
+  }
+};
+
 export const zReport = zReportInput.extend({
   name: z
     .string()
