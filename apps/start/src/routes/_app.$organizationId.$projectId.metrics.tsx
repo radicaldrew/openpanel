@@ -10,6 +10,11 @@ import { useTRPC } from '@/integrations/trpc/react';
 import { Button } from '@/components/ui/button';
 import { pushModal } from '@/modals';
 import { getDefaultIntervalByDates } from '@openpanel/constants';
+import {
+  defaultMetricFn,
+  inferMetricUnit,
+  supportsRateFunctions,
+} from '@openpanel/common';
 import type { IChartRange, IInterval } from '@openpanel/validation';
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute, useParams } from '@tanstack/react-router';
@@ -119,6 +124,8 @@ function Component() {
       endDate,
       previous: false,
       metric: 'sum' as const,
+      // Only where the name states one; the chart appends it to the axis.
+      unit: inferMetricUnit(metric),
       name: metric,
     };
   }, [
@@ -156,6 +163,14 @@ function Component() {
     value: name,
     label: name,
   }));
+
+  // For a gauge, every rate-style function can only ever draw zero. An option
+  // that cannot produce an answer is worse than no option.
+  const functionItems = (
+    metric && !supportsRateFunctions(metric)
+      ? FUNCTIONS.filter((f) => f.value === 'raw')
+      : FUNCTIONS
+  ).map((f) => ({ value: f.value, label: f.label }));
 
   // Nothing has ever been ingested. This is the first-run state, and it should
   // tell the user what to do rather than showing an empty picker.
@@ -233,6 +248,11 @@ function Component() {
             value={metric}
             onChange={(value) => {
               setMetric(value);
+              // A counter is meaningless unrated and a gauge is meaningless
+              // rated, so the function follows the metric rather than the other
+              // way round. Defaulting everything to `rate` drew a flat zero
+              // line over every gauge, which reads as "there is no data".
+              setFn(defaultMetricFn(value));
               // The previous group-by almost certainly does not exist on the
               // new metric, and leaving it would silently return nothing.
               setGroupBy(null);
@@ -244,7 +264,7 @@ function Component() {
           <Label>Function</Label>
           <Combobox
             placeholder="Function"
-            items={FUNCTIONS.map((f) => ({ value: f.value, label: f.label }))}
+            items={functionItems}
             value={fn}
             onChange={(value) => setFn(value as Fn)}
           />
