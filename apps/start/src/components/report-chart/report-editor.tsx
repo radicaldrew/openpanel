@@ -1,5 +1,5 @@
 import type { IServiceReport } from '@openpanel/db';
-import { GanttChartSquareIcon, ShareIcon } from 'lucide-react';
+import { ActivityIcon, GanttChartSquareIcon, ShareIcon } from 'lucide-react';
 import { useEffect } from 'react';
 import EditReportName from '../report/edit-report-name';
 import { ReportChartType } from '@/components/report/ReportChartType';
@@ -18,6 +18,7 @@ import {
 } from '@/components/report/reportSlice';
 import { ReportSidebar } from '@/components/report/sidebar/ReportSidebar';
 import { ReportChart } from '@/components/report-chart';
+import { ProjectLink } from '@/components/links';
 import { TimeWindowPicker } from '@/components/time-window-picker';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -35,6 +36,13 @@ export default function ReportEditor({
   const { projectId } = useAppParams();
   const dispatch = useDispatch();
   const report = useSelector((state) => state.report);
+
+  // A metric report is driven by a PromQL query, not by event series, so the
+  // event picker below would offer controls that cannot change what it draws.
+  // Everything else in this editor — chart type, range, interval, name — is
+  // source-agnostic and works on both.
+  const isMetricReport = report.dataSource === 'metrics';
+  const metricName = report.metricQuery?.metric;
 
   // Set report if reportId exists
   useEffect(() => {
@@ -67,15 +75,28 @@ export default function ReportEditor({
           )}
         </div>
         <div className="grid grid-cols-2 gap-2 p-4 pt-0 md:grid-cols-6">
-          <SheetTrigger asChild>
+          {isMetricReport ? (
             <Button
-              className="self-start"
-              icon={GanttChartSquareIcon}
-              variant="cta"
+              asChild
+              className="min-w-0 self-start"
+              icon={ActivityIcon}
+              variant="outline"
             >
-              Pick events
+              <ProjectLink href="/metrics">
+                <span className="truncate">{metricName ?? 'Edit metric'}</span>
+              </ProjectLink>
             </Button>
-          </SheetTrigger>
+          ) : (
+            <SheetTrigger asChild>
+              <Button
+                className="self-start"
+                icon={GanttChartSquareIcon}
+                variant="cta"
+              >
+                Pick events
+              </Button>
+            </SheetTrigger>
+          )}
           <div className="col-span-4 grid grid-cols-2 gap-2 md:grid-cols-4">
             <ReportChartType
               className="min-w-0 flex-1"
