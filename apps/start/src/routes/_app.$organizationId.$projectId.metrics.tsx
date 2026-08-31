@@ -1,10 +1,14 @@
 import { FullPageEmptyState } from '@/components/full-page-empty-state';
 import { PageContainer } from '@/components/page-container';
 import { ReportChart } from '@/components/report-chart';
+import { ReportInterval } from '@/components/report/ReportInterval';
+import { TimeWindowPicker } from '@/components/time-window-picker';
 import { Badge } from '@/components/ui/badge';
 import { Combobox } from '@/components/ui/combobox';
 import { Label } from '@/components/ui/label';
 import { useTRPC } from '@/integrations/trpc/react';
+import { getDefaultIntervalByDates } from '@openpanel/constants';
+import type { IChartRange, IInterval } from '@openpanel/validation';
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute, useParams } from '@tanstack/react-router';
 import { ActivityIcon, ServerIcon } from 'lucide-react';
@@ -59,6 +63,14 @@ function Component() {
   const [aggregation, setAggregation] = useState<Aggregation>('sum');
   const [groupBy, setGroupBy] = useState<string | null>(null);
 
+  // Time controls, mirroring the report editor's: a range with presets and a
+  // custom picker, plus an explicit resolution. `startDate`/`endDate` stay null
+  // until a custom range is chosen, at which point they take over from `range`.
+  const [range, setRange] = useState<IChartRange>('7d');
+  const [startDate, setStartDate] = useState<string | null>(null);
+  const [endDate, setEndDate] = useState<string | null>(null);
+  const [interval, setInterval] = useState<IInterval>('hour');
+
   const enabled = useQuery(trpc.observability.enabled.queryOptions());
   const telemetryOn = enabled.data?.enabled ?? false;
 
@@ -99,13 +111,25 @@ function Component() {
       breakdowns: [],
       chartType: 'linear' as const,
       lineType: 'monotone' as const,
-      interval: 'hour' as const,
-      range: '7d' as const,
+      interval,
+      range,
+      startDate,
+      endDate,
       previous: false,
       metric: 'sum' as const,
       name: metric,
     };
-  }, [projectId, metric, fn, aggregation, groupBy]);
+  }, [
+    projectId,
+    metric,
+    fn,
+    aggregation,
+    groupBy,
+    interval,
+    range,
+    startDate,
+    endDate,
+  ]);
 
   if (enabled.isLoading) {
     return null;
@@ -149,9 +173,36 @@ function Component() {
 
   return (
     <PageContainer>
-      <div className="mb-6 flex items-center gap-3">
+      <div className="mb-6 flex flex-wrap items-center gap-3">
         <h1 className="font-medium text-2xl">Metrics</h1>
         <Badge variant="outline">Server telemetry</Badge>
+
+        {/* Pushed right so the time controls sit where a dashboard user looks
+            for them, and wrap onto their own line on a narrow screen. */}
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <TimeWindowPicker
+            endDate={endDate}
+            onChange={(value) => {
+              setRange(value);
+              // A preset supersedes any custom window that was set before it.
+              setStartDate(null);
+              setEndDate(null);
+            }}
+            onEndDateChange={setEndDate}
+            onIntervalChange={setInterval}
+            onStartDateChange={setStartDate}
+            startDate={startDate}
+            value={range}
+          />
+          <ReportInterval
+            chartType="linear"
+            endDate={endDate}
+            interval={interval}
+            onChange={setInterval}
+            range={range}
+            startDate={startDate}
+          />
+        </div>
       </div>
 
       <div className="mb-6 grid gap-4 md:grid-cols-4">
