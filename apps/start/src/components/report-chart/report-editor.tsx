@@ -1,5 +1,5 @@
 import type { IServiceReport } from '@openpanel/db';
-import { ActivityIcon, GanttChartSquareIcon, ShareIcon } from 'lucide-react';
+import { GanttChartSquareIcon, ShareIcon } from 'lucide-react';
 import { useEffect } from 'react';
 import EditReportName from '../report/edit-report-name';
 import { ReportChartType } from '@/components/report/ReportChartType';
@@ -11,6 +11,7 @@ import {
   changeDateRanges,
   changeEndDate,
   changeInterval,
+  changeMetricQuery,
   changeStartDate,
   ready,
   reset,
@@ -18,7 +19,7 @@ import {
 } from '@/components/report/reportSlice';
 import { ReportSidebar } from '@/components/report/sidebar/ReportSidebar';
 import { ReportChart } from '@/components/report-chart';
-import { ProjectLink } from '@/components/links';
+import { MetricQueryEditor } from '@/components/report/metric-query-editor';
 import { TimeWindowPicker } from '@/components/time-window-picker';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
@@ -42,7 +43,6 @@ export default function ReportEditor({
   // Everything else in this editor — chart type, range, interval, name — is
   // source-agnostic and works on both.
   const isMetricReport = report.dataSource === 'metrics';
-  const metricName = report.metricQuery?.metric;
 
   // Set report if reportId exists
   useEffect(() => {
@@ -76,16 +76,9 @@ export default function ReportEditor({
         </div>
         <div className="grid grid-cols-2 gap-2 p-4 pt-0 md:grid-cols-6">
           {isMetricReport ? (
-            <Button
-              asChild
-              className="min-w-0 self-start"
-              icon={ActivityIcon}
-              variant="outline"
-            >
-              <ProjectLink href="/metrics">
-                <span className="truncate">{metricName ?? 'Edit metric'}</span>
-              </ProjectLink>
-            </Button>
+            // The metric query has its own row below: four controls do not fit
+            // in a cell sized for one button.
+            <div />
           ) : (
             <SheetTrigger asChild>
               <Button
@@ -134,6 +127,15 @@ export default function ReportEditor({
             <ReportSaveButton />
           </div>
         </div>
+        {isMetricReport && (
+          <div className="px-4 pb-2">
+            <MetricQueryEditor
+              onChange={(next) => dispatch(changeMetricQuery(next))}
+              projectId={projectId}
+              value={report.metricQuery ?? null}
+            />
+          </div>
+        )}
         <div className="flex flex-col gap-4 p-4" id="report-editor">
           {report.ready && (
             <ReportChart isEditMode report={{ ...report, projectId }} />

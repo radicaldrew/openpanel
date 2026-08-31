@@ -17,6 +17,7 @@ import type {
   IChartRange,
   IChartType,
   IInterval,
+  IMetricQuery,
   IReport,
   IReportOptions,
   UnionOmit,
@@ -203,6 +204,31 @@ export const reportSlice = createSlice({
     changeInterval: (state, action: PayloadAction<IInterval>) => {
       state.dirty = true;
       state.interval = action.payload;
+    },
+
+    /**
+     * Replace the metric query of a metric report.
+     *
+     * The whole query at once rather than a field at a time: changing the
+     * metric also resets the function and the group-by, and splitting that
+     * across three actions would let a caller apply half of it and leave a
+     * group-by that selects nothing on the new metric.
+     */
+    changeMetricQuery: (state, action: PayloadAction<IMetricQuery>) => {
+      // Read the outgoing metric BEFORE overwriting the query, or the
+      // comparison below is against the value that was just assigned and never
+      // matches.
+      const previousMetric = state.metricQuery?.metric;
+
+      state.dirty = true;
+      state.dataSource = 'metrics';
+      state.metricQuery = action.payload;
+
+      // The name follows the metric until someone renames it, which is what the
+      // explorer saves. A name the user chose is left alone.
+      if (!state.name || state.name === previousMetric) {
+        state.name = action.payload.metric;
+      }
     },
 
     // Chart type
@@ -453,6 +479,7 @@ export const {
   changeEndDate,
   changeDateRanges,
   changeChartType,
+  changeMetricQuery,
   changeLineType,
   resetDirty,
   changeFormula,

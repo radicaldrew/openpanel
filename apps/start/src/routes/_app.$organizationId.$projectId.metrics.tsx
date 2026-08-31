@@ -1,21 +1,20 @@
 import { FullPageEmptyState } from '@/components/full-page-empty-state';
 import { PageContainer } from '@/components/page-container';
 import { ReportChart } from '@/components/report-chart';
+import { MetricQueryEditor } from '@/components/report/metric-query-editor';
 import { ReportInterval } from '@/components/report/ReportInterval';
 import { TimeWindowPicker } from '@/components/time-window-picker';
 import { Badge } from '@/components/ui/badge';
-import { Combobox } from '@/components/ui/combobox';
-import { Label } from '@/components/ui/label';
 import { useTRPC } from '@/integrations/trpc/react';
 import { Button } from '@/components/ui/button';
 import { pushModal } from '@/modals';
 import { getDefaultIntervalByDates } from '@openpanel/constants';
-import {
-  defaultMetricFn,
-  inferMetricUnit,
-  supportsRateFunctions,
-} from '@openpanel/common';
-import type { IChartRange, IInterval } from '@openpanel/validation';
+import { inferMetricUnit } from '@openpanel/common';
+import type {
+  IChartRange,
+  IInterval,
+  IMetricQuery,
+} from '@openpanel/validation';
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute, useParams } from '@tanstack/react-router';
 import { ActivityIcon, SaveIcon, ServerIcon } from 'lucide-react';
@@ -27,28 +26,6 @@ export const Route = createFileRoute('/_app/$organizationId/$projectId/metrics')
     head: () => ({ meta: [{ title: 'Metrics' }] }),
   },
 );
-
-const FUNCTIONS = [
-  { value: 'rate', label: 'Per-second rate' },
-  { value: 'increase', label: 'Increase' },
-  { value: 'delta', label: 'Delta' },
-  { value: 'raw', label: 'Raw value' },
-] as const;
-
-const AGGREGATIONS = [
-  { value: 'sum', label: 'Sum' },
-  { value: 'avg', label: 'Average' },
-  { value: 'min', label: 'Min' },
-  { value: 'max', label: 'Max' },
-  { value: 'count', label: 'Count' },
-  { value: 'p50', label: 'p50 (histogram)' },
-  { value: 'p90', label: 'p90 (histogram)' },
-  { value: 'p95', label: 'p95 (histogram)' },
-  { value: 'p99', label: 'p99 (histogram)' },
-] as const;
-
-type Fn = (typeof FUNCTIONS)[number]['value'];
-type Aggregation = (typeof AGGREGATIONS)[number]['value'];
 
 /**
  * The metrics explorer.
@@ -65,10 +42,8 @@ function Component() {
   });
   const trpc = useTRPC();
 
-  const [metric, setMetric] = useState<string | null>(null);
-  const [fn, setFn] = useState<Fn>('rate');
-  const [aggregation, setAggregation] = useState<Aggregation>('sum');
-  const [groupBy, setGroupBy] = useState<string | null>(null);
+  const [metricQuery, setMetricQuery] = useState<IMetricQuery | null>(null);
+  const metric = metricQuery?.metric || null;
 
   // Time controls, mirroring the report editor's: a range with presets and a
   // custom picker, plus an explicit resolution. `startDate`/`endDate` stay null
@@ -88,30 +63,17 @@ function Component() {
     ),
   );
 
-  // Labels are narrowed to the selected metric: offering every label in the
-  // project would suggest group-bys that select nothing on this metric.
-  const labels = useQuery(
-    trpc.observability.labelKeys.queryOptions(
-      { projectId, metric: metric ?? undefined },
-      { enabled: telemetryOn && !!metric },
-    ),
-  );
-
   const report = useMemo(() => {
-    if (!metric) {
+    // Guard on the query rather than on `metric`, so it narrows to non-null for
+    // the object below.
+    if (!metricQuery?.metric) {
       return null;
     }
 
     return {
       projectId,
       dataSource: 'metrics' as const,
-      metricQuery: {
-        metric,
-        matchers: [],
-        fn,
-        aggregation,
-        groupBy: groupBy ? [groupBy] : [],
-      },
+      metricQuery,
       // The event side of a report is empty for a metric report; the engine
       // never looks at it.
       series: [],
@@ -125,20 +87,10 @@ function Component() {
       previous: false,
       metric: 'sum' as const,
       // Only where the name states one; the chart appends it to the axis.
-      unit: inferMetricUnit(metric),
-      name: metric,
+      unit: inferMetricUnit(metricQuery.metric),
+      name: metricQuery.metric,
     };
-  }, [
-    projectId,
-    metric,
-    fn,
-    aggregation,
-    groupBy,
-    interval,
-    range,
-    startDate,
-    endDate,
-  ]);
+  }, [projectId, metricQuery, interval, range, startDate, endDate]);
 
   if (enabled.isLoading) {
     return null;
@@ -159,22 +111,11 @@ function Component() {
     );
   }
 
-  const metricItems = (metrics.data ?? []).map((name) => ({
-    value: name,
-    label: name,
-  }));
-
-  // For a gauge, every rate-style function can only ever draw zero. An option
-  // that cannot produce an answer is worse than no option.
-  const functionItems = (
-    metric && !supportsRateFunctions(metric)
-      ? FUNCTIONS.filter((f) => f.value === 'raw')
-      : FUNCTIONS
-  ).map((f) => ({ value: f.value, label: f.label }));
+  const metricCount = metrics.data?.length ?? 0;
 
   // Nothing has ever been ingested. This is the first-run state, and it should
   // tell the user what to do rather than showing an empty picker.
-  if (!metrics.isLoading && metricItems.length === 0) {
+  if (!metrics.isLoading && metricCount === 0) {
     return (
       <PageContainer>
         <FullPageEmptyState title="No metrics yet" icon={ActivityIcon}>
@@ -239,63 +180,13 @@ function Component() {
         </div>
       </div>
 
-      <div className="mb-6 grid gap-4 md:grid-cols-4">
-        <div className="flex flex-col gap-2">
-          <Label>Metric</Label>
-          <Combobox
-            placeholder={metrics.isLoading ? 'Loading…' : 'Pick a metric'}
-            items={metricItems}
-            value={metric}
-            onChange={(value) => {
-              setMetric(value);
-              // A counter is meaningless unrated and a gauge is meaningless
-              // rated, so the function follows the metric rather than the other
-              // way round. Defaulting everything to `rate` drew a flat zero
-              // line over every gauge, which reads as "there is no data".
-              setFn(defaultMetricFn(value));
-              // The previous group-by almost certainly does not exist on the
-              // new metric, and leaving it would silently return nothing.
-              setGroupBy(null);
-            }}
-          />
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <Label>Function</Label>
-          <Combobox
-            placeholder="Function"
-            items={functionItems}
-            value={fn}
-            onChange={(value) => setFn(value as Fn)}
-          />
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <Label>Aggregation</Label>
-          <Combobox
-            placeholder="Aggregation"
-            items={AGGREGATIONS.map((a) => ({
-              value: a.value,
-              label: a.label,
-            }))}
-            value={aggregation}
-            onChange={(value) => setAggregation(value as Aggregation)}
-          />
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <Label>Group by</Label>
-          <Combobox
-            placeholder={metric ? 'None' : 'Pick a metric first'}
-            items={[
-              { value: '', label: 'None' },
-              ...(labels.data ?? []).map((l) => ({ value: l, label: l })),
-            ]}
-            value={groupBy ?? ''}
-            onChange={(value) => setGroupBy(value || null)}
-          />
-        </div>
-      </div>
+      <MetricQueryEditor
+        className="mb-6"
+        enabled={telemetryOn}
+        onChange={setMetricQuery}
+        projectId={projectId}
+        value={metricQuery}
+      />
 
       {report ? (
         <div className="rounded-lg border bg-card p-4">
