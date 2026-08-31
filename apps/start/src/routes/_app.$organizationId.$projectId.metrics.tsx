@@ -7,11 +7,13 @@ import { Badge } from '@/components/ui/badge';
 import { Combobox } from '@/components/ui/combobox';
 import { Label } from '@/components/ui/label';
 import { useTRPC } from '@/integrations/trpc/react';
+import { Button } from '@/components/ui/button';
+import { pushModal } from '@/modals';
 import { getDefaultIntervalByDates } from '@openpanel/constants';
 import type { IChartRange, IInterval } from '@openpanel/validation';
 import { useQuery } from '@tanstack/react-query';
 import { createFileRoute, useParams } from '@tanstack/react-router';
-import { ActivityIcon, ServerIcon } from 'lucide-react';
+import { ActivityIcon, SaveIcon, ServerIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 export const Route = createFileRoute('/_app/$organizationId/$projectId/metrics')(
@@ -202,6 +204,23 @@ function Component() {
             range={range}
             startDate={startDate}
           />
+          {/* A metric report persists like any other — dataSource and
+              metricQuery are columns on the report — so a chart built here can
+              become a dashboard panel rather than something to rebuild by hand
+              every time someone wants to look at it. */}
+          <Button
+            disabled={!report}
+            onClick={() => {
+              if (report) {
+                pushModal('SaveReport', { report });
+              }
+            }}
+            size="sm"
+            variant="outline"
+          >
+            <SaveIcon className="mr-2 size-4" />
+            Save to dashboard
+          </Button>
         </div>
       </div>
 
