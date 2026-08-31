@@ -190,25 +190,58 @@ describe('output', () => {
     expect(result.compiled).toContain('http_requests_total');
   });
 
-  it('fills the bucket grid so an omitted step cannot shift the line', async () => {
-    queryRange.mockResolvedValue({
-      status: 'success',
-      data: {
-        resultType: 'matrix',
-        result: [
-          {
-            metric: { op_project_id: 'proj_123' },
-            // One point only; Prometheus omits empty steps.
-            values: [[new Date('2024-01-01T00:00:00.000Z').getTime() / 1000, '5']],
-          },
-        ],
-      },
-    });
+  const at = (hour: number) =>
+    new Date(`2024-01-01T${String(hour).padStart(2, '0')}:00:00.000Z`).getTime() /
+    1000;
+
+  const matrixOf = (values: [number, string][]) => ({
+    status: 'success',
+    data: {
+      resultType: 'matrix',
+      result: [{ metric: { op_project_id: 'proj_123' }, values }],
+    },
+  });
+
+  it('fills a gap INSIDE the data so an omitted step cannot shift the line', async () => {
+    // Prometheus omits empty steps. Without filling, the 05:00 point would be
+    // drawn in the 01:00 slot and every later point would be misdated.
+    queryRange.mockResolvedValue(matrixOf([
+      [at(0), '5'],
+      [at(5), '9'],
+    ]));
 
     const result = await executeMetricChart(base);
     const series = result.chart.series[0];
 
-    // 24 hourly buckets across the range, not one.
+    expect(series?.data.map((d) => d.count)).toEqual([5, 0, 0, 0, 0, 9]);
+  });
+
+  /**
+   * A bucket with no sample renders as zero, not as a gap, so a grid stretched
+   * over the whole range draws a cliff to zero on both sides of the data. On a
+   * gauge that sat at 1 all day that reads as an outage rather than as the edge
+   * of what was measured.
+   */
+  it('does not invent zeros outside the span the backend covered', async () => {
+    queryRange.mockResolvedValue(matrixOf([
+      [at(10), '1'],
+      [at(11), '1'],
+    ]));
+
+    const result = await executeMetricChart(base);
+    const series = result.chart.series[0];
+
+    expect(series?.data.map((d) => d.count)).toEqual([1, 1]);
+  });
+
+  it('keeps the full grid when a previous period is overlaid', async () => {
+    // The two periods are aligned by index, so trimming one and not the other
+    // would compare a bucket against the wrong hour.
+    queryRange.mockResolvedValue(matrixOf([[at(10), '1']]));
+
+    const result = await executeMetricChart({ ...base, previous: true });
+    const series = result.chart.series[0];
+
     expect(series?.data.length).toBeGreaterThan(20);
   });
 

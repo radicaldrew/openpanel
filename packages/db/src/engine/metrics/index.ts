@@ -234,10 +234,16 @@ function bucketGrid(
   const times: number[] = [];
   const stepMs = stepSeconds * 1000;
 
-  // Align to the step so the grid matches the timestamps Prometheus returns,
-  // which are themselves step-aligned. Without this every bucket is offset by
-  // the range's sub-step remainder and nothing lines up.
-  let cursor = Math.floor(start.getTime() / stepMs) * stepMs;
+  // Align to `start`, NOT to the step.
+  //
+  // The backend returns points at start + k*step, so a grid floored to the step
+  // sits at a constant offset from them. Every sample then rounds to a bucket
+  // one place further on than its own, and the LAST sample rounds past the end
+  // of the grid and is dropped — leaving the final bucket at zero and drawing a
+  // cliff at the right-hand edge of every chart. Measured: a 24h range starting
+  // at 08:56 produced 14 points ending at 08:56, and the chart showed the last
+  // hour as zero.
+  let cursor = start.getTime();
 
   while (cursor <= end.getTime()) {
     out.push(formatClickhouseDate(new Date(cursor)));
@@ -246,6 +252,57 @@ function bucketGrid(
   }
 
   return { labels: out, times };
+}
+
+/**
+ * Narrow a bucket grid to the span the backend actually covered.
+ *
+ * A bucket with no sample renders as ZERO, not as a gap: a chart data point is
+ * a plain number and has no way to say "not observed". Drawing zero where
+ * nothing was measured invents a fact — for a gauge that sat at 1 all day it
+ * produces a cliff to zero on both sides of the data, which reads as an outage
+ * rather than as the edge of what we know.
+ *
+ * Trimming is the honest option available without teaching every renderer to
+ * handle nulls: outside the observed span the chart simply says nothing. Inside
+ * it a genuine gap still reads as zero, which is a much smaller lie and a much
+ * rarer one — the scrape interval is far shorter than any bucket.
+ */
+function trimToObserved(
+  response: PromMatrixResponse,
+  grid: { labels: string[]; times: number[] },
+  stepSeconds: number,
+): { labels: string[]; times: number[] } {
+  const stamps: number[] = [];
+
+  for (const series of response.data?.result ?? []) {
+    for (const [unixSeconds] of series.values ?? []) {
+      stamps.push(unixSeconds * 1000);
+    }
+  }
+
+  if (stamps.length === 0 || grid.times.length === 0) {
+    return grid;
+  }
+
+  const tolerance = (stepSeconds * 1000) / 2;
+  const earliest = Math.min(...stamps) - tolerance;
+  const latest = Math.max(...stamps) + tolerance;
+
+  const from = grid.times.findIndex((t) => t >= earliest);
+  if (from === -1) {
+    return grid;
+  }
+
+  let to = grid.times.length - 1;
+  while (to > from && (grid.times[to] as number) > latest) {
+    to -= 1;
+  }
+
+  return {
+    labels: grid.labels.slice(from, to + 1),
+    times: grid.times.slice(from, to + 1),
+  };
 }
 
 async function runOnce(
@@ -277,7 +334,14 @@ async function runOnce(
     step: `${stepSeconds}s`,
   })) as PromMatrixResponse;
 
-  const grid = bucketGrid(start, end, stepSeconds);
+  const full = bucketGrid(start, end, stepSeconds);
+
+  // Only when there is nothing to compare against. A previous-period overlay is
+  // aligned to the current period by index, so the two runs have to keep the
+  // same grid length.
+  const grid = input.previous
+    ? full
+    : trimToObserved(response, full, stepSeconds);
 
   return {
     // The query actually sent, so the UI's "show query" is not a fiction.
