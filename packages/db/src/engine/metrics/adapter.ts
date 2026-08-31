@@ -127,6 +127,17 @@ export interface AdaptOptions {
    * misdates the whole line. Passing the expected grid makes the gaps explicit.
    */
   buckets?: string[];
+  /**
+   * Epoch milliseconds for each entry of {@link buckets}, in the same order.
+   *
+   * Present so samples can be SNAPPED to the nearest bucket instead of matched
+   * by an exact formatted date. The backend does not return the grid it was
+   * asked for: a range starting at :137 past the hour comes back at :135, and
+   * a start that is not step-aligned shifts every point by the remainder.
+   * Exact matching therefore found nothing and, because a missing bucket reads
+   * as zero, drew a flat zero line — indistinguishable from "no data".
+   */
+  bucketTimes?: number[];
 }
 
 /**
@@ -159,12 +170,40 @@ export function adaptMatrixToConcreteSeries(
     const labels = series.metric ?? {};
 
     const byDate = new Map<string, number>();
+    const grid = options.buckets;
+    const gridTimes = options.bucketTimes;
+    // Half a step: the widest a sample can be from a bucket's centre and still
+    // belong to it.
+    const tolerance =
+      gridTimes && gridTimes.length > 1
+        ? ((gridTimes[1] as number) - (gridTimes[0] as number)) / 2
+        : 0;
+
     for (const [unixSeconds, raw] of series.values ?? []) {
       const value = Number.parseFloat(raw);
       if (Number.isNaN(value)) {
         continue;
       }
-      byDate.set(formatClickhouseDate(new Date(unixSeconds * 1000)), value);
+
+      const ms = unixSeconds * 1000;
+
+      if (grid && gridTimes && gridTimes.length > 0 && tolerance > 0) {
+        const first = gridTimes[0] as number;
+        const step = tolerance * 2;
+        const index = Math.round((ms - first) / step);
+
+        if (index >= 0 && index < grid.length) {
+          const bucketMs = gridTimes[index] as number;
+          if (Math.abs(ms - bucketMs) <= tolerance) {
+            byDate.set(grid[index] as string, value);
+            continue;
+          }
+        }
+        // Outside the grid entirely: drop it rather than misdate it.
+        continue;
+      }
+
+      byDate.set(formatClickhouseDate(new Date(ms)), value);
     }
 
     const dates = options.buckets ?? [...byDate.keys()].sort();

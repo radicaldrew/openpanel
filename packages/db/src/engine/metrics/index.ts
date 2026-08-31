@@ -225,8 +225,13 @@ function parseDuration(value: string): number | undefined {
  * Every bucket the chart expects, so a step Prometheus omitted for lack of data
  * does not shift every later point left.
  */
-function bucketGrid(start: Date, end: Date, stepSeconds: number): string[] {
+function bucketGrid(
+  start: Date,
+  end: Date,
+  stepSeconds: number,
+): { labels: string[]; times: number[] } {
   const out: string[] = [];
+  const times: number[] = [];
   const stepMs = stepSeconds * 1000;
 
   // Align to the step so the grid matches the timestamps Prometheus returns,
@@ -236,10 +241,11 @@ function bucketGrid(start: Date, end: Date, stepSeconds: number): string[] {
 
   while (cursor <= end.getTime()) {
     out.push(formatClickhouseDate(new Date(cursor)));
+    times.push(cursor);
     cursor += stepMs;
   }
 
-  return out;
+  return { labels: out, times };
 }
 
 async function runOnce(
@@ -271,13 +277,16 @@ async function runOnce(
     step: `${stepSeconds}s`,
   })) as PromMatrixResponse;
 
+  const grid = bucketGrid(start, end, stepSeconds);
+
   return {
     // The query actually sent, so the UI's "show query" is not a fiction.
     compiled: promql,
     series: adaptMatrixToConcreteSeries(response, {
       groupBy: compiled.groupBy,
       metricName: input.name ?? input.query.metric,
-      buckets: bucketGrid(start, end, stepSeconds),
+      buckets: grid.labels,
+      bucketTimes: grid.times,
     }),
   };
 }

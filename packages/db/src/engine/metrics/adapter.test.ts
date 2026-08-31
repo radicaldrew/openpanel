@@ -12,6 +12,72 @@ const matrix = (result: unknown[]) => ({
   data: { resultType: 'matrix', result },
 }) as Parameters<typeof adaptMatrixToConcreteSeries>[0];
 
+/**
+ * The backend does not return the grid it was asked for. A range starting at
+ * :137 past the hour comes back at :135, and any start that is not step-aligned
+ * shifts every point by the remainder. Because a bucket with no match reads as
+ * zero, exact date matching drew a flat zero line — which looks exactly like
+ * "no data" rather than like a bug, and is how this went unnoticed.
+ */
+describe('samples that do not land exactly on the grid', () => {
+  const HOUR = 3_600_000;
+  const base = Date.UTC(2024, 0, 1, 12, 0, 0);
+
+  const grid = {
+    buckets: ['2024-01-01 12:00:00', '2024-01-01 13:00:00', '2024-01-01 14:00:00'],
+    bucketTimes: [base, base + HOUR, base + 2 * HOUR],
+  };
+
+  it('snaps an offset sample onto its bucket instead of dropping it', () => {
+    const [series] = adaptMatrixToConcreteSeries(
+      matrix([
+        {
+          metric: { [PROJECT_LABEL]: 'p1' },
+          // 135 seconds past each bucket, exactly as gigapipe returns them.
+          values: [
+            [(base + 135_000) / 1000, '7'],
+            [(base + HOUR + 135_000) / 1000, '9'],
+          ],
+        },
+      ]),
+      { ...options, ...grid },
+    );
+
+    expect(series?.data.map((d) => d.count)).toEqual([7, 9, 0]);
+  });
+
+  it('still reports a genuinely empty bucket as zero', () => {
+    const [series] = adaptMatrixToConcreteSeries(
+      matrix([
+        {
+          metric: { [PROJECT_LABEL]: 'p1' },
+          values: [[(base + 2 * HOUR) / 1000, '4']],
+        },
+      ]),
+      { ...options, ...grid },
+    );
+
+    expect(series?.data.map((d) => d.count)).toEqual([0, 0, 4]);
+  });
+
+  it('drops a sample that falls outside the grid rather than misdating it', () => {
+    const [series] = adaptMatrixToConcreteSeries(
+      matrix([
+        {
+          metric: { [PROJECT_LABEL]: 'p1' },
+          values: [
+            [(base - 5 * HOUR) / 1000, '99'],
+            [(base + HOUR) / 1000, '3'],
+          ],
+        },
+      ]),
+      { ...options, ...grid },
+    );
+
+    expect(series?.data.map((d) => d.count)).toEqual([0, 3, 0]);
+  });
+});
+
 describe('adaptMatrixToConcreteSeries', () => {
   it('maps a matrix series onto the shape format() consumes', () => {
     const [series] = adaptMatrixToConcreteSeries(
