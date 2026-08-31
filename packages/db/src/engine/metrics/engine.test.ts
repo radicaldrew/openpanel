@@ -29,6 +29,48 @@ beforeEach(() => {
   queryRange.mockResolvedValue(emptyMatrix);
 });
 
+/**
+ * gigapipe returns an EMPTY result — not a sparse one — for any step wider than
+ * roughly twice its 300s fill staleness. The metrics page defaults to an hourly
+ * interval, so before this the page listed every metric name and drew nothing.
+ */
+describe('wide steps are evaluated as subqueries', () => {
+  it('wraps the query when the step exceeds what gigapipe answers directly', async () => {
+    await executeMetricChart(base);
+
+    expect(sent().step).toBe('3600s');
+    expect(sent().promql).toMatch(/^avg_over_time\(\(.*\)\[3600s:300s\]\)$/);
+  });
+
+  it('sends the query unwrapped when the step is narrow enough', async () => {
+    // 2h at minute resolution = 120 points, so the step stays at 60s.
+    await executeMetricChart({
+      ...base,
+      interval: 'minute',
+      startDate: '2024-01-01T00:00:00.000Z',
+      endDate: '2024-01-01T02:00:00.000Z',
+    });
+
+    expect(sent().step).toBe('60s');
+    expect(sent().promql).not.toContain('avg_over_time');
+  });
+
+  it('sizes the rate window from the inner step, not the outer one', async () => {
+    // Four times the 300s inner step. Sizing it off the 3600s outer step would
+    // put a 4h window on an hourly chart and flatten what it exists to show.
+    await executeMetricChart(base);
+
+    expect(sent().promql).toContain('[1200s]');
+    expect(sent().promql).not.toContain('[14400s]');
+  });
+
+  it('reports the query it actually sent, so "show query" is not a fiction', async () => {
+    const result = await executeMetricChart(base);
+
+    expect(result.compiled).toBe(sent().promql);
+  });
+});
+
 describe('step selection', () => {
   it('uses the requested interval when the range fits', async () => {
     // 24h at hourly = 24 points.
@@ -63,15 +105,20 @@ describe('step selection', () => {
 });
 
 describe('rate window', () => {
-  it('never rates over a window shorter than the step', async () => {
+  it('never rates over a window shorter than the evaluation step', async () => {
     // A rate window narrower than the step samples the gaps between buckets and
     // draws a sawtooth that reads as real instability.
+    //
+    // At an hourly interval the query is evaluated as a subquery, so the step
+    // the window has to clear is the INNER one (300s), not the 3600s bucket
+    // width. Four times the outer step would put a 4h window on an hourly
+    // chart and flatten exactly what the chart exists to show.
     const result = await executeMetricChart({
       ...base,
       query: { metric: 'm', fn: 'rate', window: '1m' },
     });
 
-    expect(sent().promql).toContain('[14400s]'); // 4 x 3600s step
+    expect(sent().promql).toContain('[1200s]'); // 4 x 300s inner step
     expect(result.notices.join(' ')).toMatch(/widened/i);
   });
 
@@ -91,7 +138,14 @@ describe('rate window', () => {
       query: { metric: 'm', fn: 'raw' },
     });
 
-    expect(sent().promql).not.toContain('[');
+    // The outer brackets here are the engine's own subquery downsampling, not a
+    // rate window, so the assertion is about the expression INSIDE them.
+    const inner = sent().promql.replace(
+      /^avg_over_time\(\((.*)\)\[\d+s:\d+s\]\)$/,
+      '$1',
+    );
+
+    expect(inner).not.toContain('[');
   });
 });
 

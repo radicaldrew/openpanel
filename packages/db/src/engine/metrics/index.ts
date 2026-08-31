@@ -41,6 +41,42 @@ const INTERVAL_SECONDS: Record<IInterval, number> = {
  */
 const MAX_POINTS = 1500;
 
+/**
+ * The widest Prometheus step gigapipe answers directly.
+ *
+ * gigapipe fills gaps with `ORDER BY ... WITH FILL ... STALENESS 300000`, and a
+ * step wider than about twice that staleness returns an EMPTY result rather
+ * than a sparse one. Measured against a live instance: a 601s step returns
+ * data, 650s returns nothing, and the bare selector and every aggregation over
+ * it fail together — so this is the step, not the query shape.
+ *
+ * That made every chart on the metrics page come back empty while the metric
+ * names listed fine, because the page asks for an hourly interval and an hour
+ * is six times this bound.
+ *
+ * Above the bound the expression is evaluated as a SUBQUERY: the inner
+ * selector runs at a step gigapipe does answer, and each output point
+ * aggregates one bucket of those inner samples. Verified to return data at a
+ * 3600s step where the same expression unwrapped returns none. Downsampling a
+ * dense inner evaluation is also what Grafana does at wide intervals.
+ */
+const MAX_DIRECT_STEP_SECONDS = 300;
+
+/**
+ * Wrap an expression in a subquery when the step is too wide to evaluate
+ * directly. Below the bound the query is sent unchanged.
+ */
+function downsampleForStep(promql: string, stepSeconds: number): string {
+  if (stepSeconds <= MAX_DIRECT_STEP_SECONDS) {
+    return promql;
+  }
+
+  // avg over the bucket: for a gauge it is the bucket's level, and for a rate
+  // it is the mean rate across the bucket. Both are what a chart at this
+  // interval is asking for.
+  return `avg_over_time((${promql})[${stepSeconds}s:${MAX_DIRECT_STEP_SECONDS}s])`;
+}
+
 export interface MetricChartInput {
   projectId: string;
   query: MetricQuery;
@@ -213,22 +249,31 @@ async function runOnce(
   stepSeconds: number,
   notices: string[],
 ): Promise<{ series: ConcreteSeries[]; compiled: string }> {
+  // When the query will be evaluated as a subquery, the rate window has to be
+  // sized against the INNER step. Sizing it against the outer one would put a
+  // four-hour window on an hourly chart and smooth away everything the chart
+  // exists to show.
+  const windowStep = Math.min(stepSeconds, MAX_DIRECT_STEP_SECONDS);
+
   const compiled = compileMetricQuery(
-    { ...input.query, window: resolveWindow(input.query, stepSeconds, notices) },
+    { ...input.query, window: resolveWindow(input.query, windowStep, notices) },
     input.projectId,
   );
 
   notices.push(...compiled.notices);
 
+  const promql = downsampleForStep(compiled.promql, stepSeconds);
+
   const response = (await queryRange({
-    promql: compiled.promql,
+    promql,
     start,
     end,
     step: `${stepSeconds}s`,
   })) as PromMatrixResponse;
 
   return {
-    compiled: compiled.promql,
+    // The query actually sent, so the UI's "show query" is not a fiction.
+    compiled: promql,
     series: adaptMatrixToConcreteSeries(response, {
       groupBy: compiled.groupBy,
       metricName: input.name ?? input.query.metric,
