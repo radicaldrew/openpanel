@@ -27,18 +27,47 @@ type OpenPanelComponentProps = Omit<OpenPanelOptions, 'filter'> & {
   strategy?: 'beforeInteractive' | 'afterInteractive' | 'lazyOnload' | 'worker';
 };
 
+// Everything below is embedded in an inline <script>, and JSON.stringify does
+// not escape characters the HTML tokenizer cares about. A string containing
+// "</script>" closes the block early and the rest is parsed as markup — so a
+// profile field passed to `identify` could inject arbitrary HTML into every
+// page that renders the component.
+//
+// These are emitted as JavaScript unicode escapes: the parsed value is
+// unchanged, but the text is inert to the tokenizer. U+2028 and U+2029 are
+// valid in JSON and were historically invalid in JavaScript string literals.
+const SCRIPT_ESCAPES: Record<string, string> = {
+  '&': '\\u0026',
+  '>': '\\u003e',
+  '<': '\\u003c',
+  '\u2028': '\\u2028',
+  '\u2029': '\\u2029',
+};
+
+const scriptSafeJSON = (value: unknown) => {
+  const json = JSON.stringify(value);
+  // JSON.stringify returns undefined for undefined, functions and symbols.
+  if (json === undefined) {
+    return 'undefined';
+  }
+  return json.replace(/[&><\u2028\u2029]/g, (char) => SCRIPT_ESCAPES[char] ?? char);
+};
+
 const stringify = (obj: unknown) => {
   if (typeof obj === 'object' && obj !== null && obj !== undefined) {
     const entries = Object.entries(obj).map(([key, value]) => {
       if (key === 'filter') {
+        // `filter` is a JavaScript expression written by the integrator, not
+        // data, so it is emitted verbatim — escaping it would break the
+        // expression. It must never be built from end-user input.
         return `"${key}":${value}`;
       }
-      return `"${key}":${JSON.stringify(value)}`;
+      return `"${key}":${scriptSafeJSON(value)}`;
     });
     return `{${entries.join(',')}}`;
   }
 
-  return JSON.stringify(obj);
+  return scriptSafeJSON(obj);
 };
 
 export function OpenPanelComponent({
@@ -106,7 +135,7 @@ export function IdentifyComponent(props: IdentifyComponentProps) {
   return (
     <Script
       dangerouslySetInnerHTML={{
-        __html: `window.op('identify', ${JSON.stringify(props)});`,
+        __html: `window.op('identify', ${scriptSafeJSON(props)});`,
       }}
     />
   );
@@ -116,7 +145,7 @@ export function SetGlobalPropertiesComponent(props: Record<string, unknown>) {
   return (
     <Script
       dangerouslySetInnerHTML={{
-        __html: `window.op('setGlobalProperties', ${JSON.stringify(props)});`,
+        __html: `window.op('setGlobalProperties', ${scriptSafeJSON(props)});`,
       }}
     />
   );
