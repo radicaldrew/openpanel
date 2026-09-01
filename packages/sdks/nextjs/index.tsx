@@ -56,13 +56,18 @@ const scriptSafeJSON = (value: unknown) => {
 const stringify = (obj: unknown) => {
   if (typeof obj === 'object' && obj !== null && obj !== undefined) {
     const entries = Object.entries(obj).map(([key, value]) => {
+      // The key is escaped the same way the value is. It reaches the same
+      // inline <script>, and a property name is as capable of carrying
+      // "</script>" as a property value — globalProperties is an open
+      // Record<string, unknown>, so both halves come from the same place.
+      // scriptSafeJSON supplies the surrounding quotes.
       if (key === 'filter') {
         // `filter` is a JavaScript expression written by the integrator, not
-        // data, so it is emitted verbatim — escaping it would break the
+        // data, so its VALUE is emitted verbatim — escaping it would break the
         // expression. It must never be built from end-user input.
-        return `"${key}":${value}`;
+        return `${scriptSafeJSON(key)}:${value}`;
       }
-      return `"${key}":${scriptSafeJSON(value)}`;
+      return `${scriptSafeJSON(key)}:${scriptSafeJSON(value)}`;
     });
     return `{${entries.join(',')}}`;
   }
