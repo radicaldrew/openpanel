@@ -243,6 +243,19 @@ export const reportRouter = createTRPCRouter({
           projectId: report.projectId,
           dashboardId: report.dashboardId,
           name: `Copy of ${report.name}`,
+          // Hand-maintained rather than `reportWriteData`, which takes a
+          // validated config (`series`) and not a stored row (`events`). That
+          // makes this list something a new Report column has to be added to
+          // by hand, and it has already been missed once: `dataSource` and
+          // `metricQuery` were absent, so duplicating a metric panel produced
+          // an events report with an empty series — a chart that renders
+          // nothing and reports no error. `create` and `update` above carry
+          // both; this is the third copy and it had drifted from them.
+          dataSource: report.dataSource,
+          // The row holds `null` for a report with no query, and Prisma will
+          // not take a bare `null` for a Json column: it reserves that for a
+          // JSON null literal and wants `DbNull` for a SQL NULL.
+          metricQuery: report.metricQuery ?? Prisma.DbNull,
           events: report.events!,
           globalFilters: report.globalFilters ?? [],
           interval: report.interval,
