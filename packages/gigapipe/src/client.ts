@@ -145,11 +145,15 @@ export async function postToGigapipe(
         'content-type': contentType,
         authorization: authHeader(config),
       },
-      // TypeScript's `BodyInit` wants `ArrayBufferView<ArrayBuffer>`, while
+      // TypeScript's body type wants `ArrayBufferView<ArrayBuffer>`, while
       // `Uint8Array`/`Buffer` are typed `<ArrayBufferLike>` since TS 5.7. The
       // runtime accepts either; converting would copy the whole payload on the
       // ingest hot path, so this is a typing-only cast.
-      body: body as unknown as BodyInit,
+      //
+      // Indexed off `RequestInit` rather than naming `BodyInit`: that global
+      // only exists with the DOM lib, and `admin/tsconfig.json` builds on
+      // `lib: ["ES2022"] + types: ["node"]`, where it is an unresolved name.
+      body: body as unknown as RequestInit['body'],
       signal: controller.signal,
     });
 
