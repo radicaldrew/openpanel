@@ -73,6 +73,77 @@ export class GigapipeError extends Error {
   }
 }
 
+/**
+ * gigapipe response bodies are unbounded, and `res.json()` buffers and parses
+ * the whole thing before any caller can look at it. A grouped metric query on a
+ * high-cardinality label (`instance`, `pod`, `path`, `le`) fans out exactly that
+ * way, and the agent picks its own group-by labels from the keys
+ * `describe_metric` hands it and can issue a query per turn — so "nobody would
+ * group by that" is not a bound. gigapipe's own sample ceiling only turns the
+ * very largest of those into a 413; everything under it arrives in full and is
+ * parsed into this process.
+ *
+ * Reading in chunks and giving up past the ceiling makes an oversized response
+ * cost bounded memory instead of the whole matrix. Reported as 413 because that
+ * is the status the read path already treats as "narrow the query" rather than
+ * as something to retry.
+ *
+ * Deliberately NOT a PromQL-level cap. `topk` in a range query is re-evaluated
+ * at every step and returns the union of every step's top-K, so it bounds
+ * nothing reliably — see docs/observability/03-metrics-engine.md D8, which
+ * prescribes a two-phase ranking query as the real fix for fan-out. This is a
+ * memory backstop, not that fix.
+ */
+const MAX_RESPONSE_BYTES = 32 * 1024 * 1024;
+
+/** What an over-ceiling response reports, so callers can match on it. */
+export const GIGAPIPE_ERROR_STATUS_TOO_LARGE = 413;
+
+async function readJsonCapped(res: Response, what: string): Promise<unknown> {
+  // No stream to meter (a buffered or stubbed response) — nothing to do.
+  if (!res.body) {
+    return await res.json();
+  }
+
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+
+      if (done) {
+        break;
+      }
+
+      size += value.byteLength;
+
+      if (size > MAX_RESPONSE_BYTES) {
+        await reader.cancel();
+        throw new GigapipeError(
+          `gigapipe returned more than ${Math.floor(MAX_RESPONSE_BYTES / 1024 / 1024)}MB for a ${what} — narrow the time range, add a filter, or group by fewer labels`,
+          GIGAPIPE_ERROR_STATUS_TOO_LARGE,
+        );
+      }
+
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const merged = new Uint8Array(size);
+  let offset = 0;
+
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return JSON.parse(new TextDecoder().decode(merged));
+}
+
 export class GigapipeNotConfiguredError extends Error {
   constructor() {
     super(
@@ -253,7 +324,7 @@ export async function queryRange(
       );
     }
 
-    return await res.json();
+    return await readJsonCapped(res, 'range query');
   } catch (error) {
     if (error instanceof GigapipeError) {
       throw error;
@@ -324,7 +395,7 @@ export async function queryLogRange(
       );
     }
 
-    return await res.json();
+    return await readJsonCapped(res, 'log query');
   } catch (error) {
     if (error instanceof GigapipeError) throw error;
     if (error instanceof Error && error.name === 'AbortError') {
@@ -405,7 +476,7 @@ export async function queryLogPatterns(
       );
     }
 
-    return await res.json();
+    return await readJsonCapped(res, 'patterns query');
   } catch (error) {
     if (error instanceof GigapipeError) throw error;
     if (error instanceof Error && error.name === 'AbortError') {
