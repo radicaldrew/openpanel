@@ -5,7 +5,14 @@ import {
   adaptMatrixToConcreteSeries,
 } from './adapter';
 
-const options = { groupBy: [PROJECT_LABEL, 'route'], metricName: 'http_requests_total' };
+// `projectId` is now required: the adapter verifies the project label on every
+// series before stripping it, so every fixture has to state which project it
+// believes the response belongs to. Every `metric` below carries 'p1'.
+const options = {
+  projectId: 'p1',
+  groupBy: [PROJECT_LABEL, 'route'],
+  metricName: 'http_requests_total',
+};
 
 const matrix = (result: unknown[]) => ({
   status: 'success',
@@ -116,7 +123,7 @@ describe('adaptMatrixToConcreteSeries', () => {
   it('falls back to the metric name when there is nothing to group by', () => {
     const [series] = adaptMatrixToConcreteSeries(
       matrix([{ metric: { [PROJECT_LABEL]: 'p1' }, values: [[1, '5']] }]),
-      { groupBy: [PROJECT_LABEL], metricName: 'up' },
+      { projectId: 'p1', groupBy: [PROJECT_LABEL], metricName: 'up' },
     );
 
     expect(series?.name).toEqual(['up']);
@@ -186,6 +193,56 @@ describe('adaptMatrixToConcreteSeries', () => {
     expect(() =>
       adaptMatrixToConcreteSeries(
         { status: 'error' } as Parameters<typeof adaptMatrixToConcreteSeries>[0],
+        options,
+      ),
+    ).toThrow(MetricsResponseError);
+  });
+
+  it('refuses a series belonging to a different project', () => {
+    // The response-side half of the tenancy boundary. The compiled query already
+    // pins op_project_id in the selector, so reaching this means the backend
+    // disagreed with the query — the only case the injected matcher cannot see.
+    expect(() =>
+      adaptMatrixToConcreteSeries(
+        matrix([
+          { metric: { [PROJECT_LABEL]: 'p2', route: '/a' }, values: [[1, '1']] },
+        ]),
+        options,
+      ),
+    ).toThrow(MetricsResponseError);
+  });
+
+  it('does not echo the foreign project id in the error', () => {
+    // The message reaches logs and, through the chart error, a user. Naming the
+    // other tenant would turn a containment failure into a disclosure as well.
+    expect(() =>
+      adaptMatrixToConcreteSeries(
+        matrix([{ metric: { [PROJECT_LABEL]: 'p2' }, values: [] }]),
+        options,
+      ),
+    ).toThrow(/expected p1(?!.*p2)/);
+  });
+
+  it('refuses a series that carries no project label at all', () => {
+    // A series that lost the label is indistinguishable from one that was never
+    // scoped. Accepting it is the vacuous check the spec deleted.
+    expect(() =>
+      adaptMatrixToConcreteSeries(
+        matrix([{ metric: { route: '/a' }, values: [[1, '1']] }]),
+        options,
+      ),
+    ).toThrow(MetricsResponseError);
+  });
+
+  it('drops the whole response, not just the offending series', () => {
+    // Filtering would draw a chart that silently omits the evidence of its own
+    // failure. One good series in front of a foreign one must not render.
+    expect(() =>
+      adaptMatrixToConcreteSeries(
+        matrix([
+          { metric: { [PROJECT_LABEL]: 'p1', route: '/a' }, values: [[1, '1']] },
+          { metric: { [PROJECT_LABEL]: 'p2', route: '/b' }, values: [[1, '9']] },
+        ]),
         options,
       ),
     ).toThrow(MetricsResponseError);

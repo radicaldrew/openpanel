@@ -83,9 +83,15 @@ function seriesName(
  * Everything except the project label becomes a breakdown.
  *
  * The project label is stripped because it is infrastructure, not data: it is
- * the same for every series in the response (the compiler guarantees it), so
- * surfacing it would add a constant column to every chart legend and leak an
- * internal identifier into a user-facing label.
+ * the same for every series in the response — the compiler injects it and
+ * `assertOwnedBy` has already verified it on this very series — so surfacing it
+ * would add a constant column to every chart legend and leak an internal
+ * identifier into a user-facing label.
+ *
+ * Stripping is only safe BECAUSE the check ran first. Every function here that
+ * drops the label (this one, `seriesName`, `seriesId`) destroys the only
+ * evidence of which project a series came from, so the order is load-bearing:
+ * verify, then strip.
  */
 function breakdownsOf(labels: Record<string, string>): Record<string, string> {
   const out: Record<string, string> = {};
@@ -114,7 +120,67 @@ function seriesId(labels: Record<string, string>): string {
   return parts.join(',') || 'series';
 }
 
+/**
+ * The response-side half of the tenancy boundary.
+ *
+ * The compiler injects `op_project_id="<project>"` into every selector, and
+ * forces the same label into the `by (...)` of every aggregation
+ * (`renderGrouping`, packages/gigapipe/src/promql/compile.ts) specifically so
+ * it survives aggregation and arrives here — that comment says the alternative
+ * would leave the response-side ownership check vacuous. Which it would: a rule
+ * that preserves evidence buys nothing until something reads the evidence. This
+ * is the reader.
+ *
+ * It is not a restatement of the injected matcher, because it fails for reasons
+ * the matcher cannot see: a gigapipe-side bug, a transpiler regression that
+ * drops the fingerprint filter (its stream planner rewrites an empty-valued
+ * matcher into "every series WITHOUT this label" —
+ * docs/observability/01-tenancy-and-security.md section 3), or a future caller
+ * pointing this adapter at a response the structured compiler did not produce,
+ * such as a raw-PromQL path.
+ *
+ * A MISSING label fails too. A series that lost the label is indistinguishable
+ * from one that was never scoped, and accepting it is exactly the vacuous mode
+ * the spec deleted.
+ *
+ * The WHOLE response is dropped rather than the offending series filtered out.
+ * Filtering would render a chart that silently omits the evidence of its own
+ * failure; the spec is explicit that an empty or quietly-shortened chart is not
+ * an acceptable rendering of a failed ownership check.
+ */
+function assertOwnedBy(
+  labels: Record<string, string>,
+  projectId: string,
+): void {
+  const owner = labels[PROJECT_LABEL];
+
+  if (owner === undefined) {
+    throw new MetricsResponseError(
+      `Telemetry response contains a series with no ${PROJECT_LABEL} label (expected ${projectId}); refusing to render it`,
+    );
+  }
+
+  if (owner !== projectId) {
+    // The foreign value is deliberately not interpolated. This message reaches
+    // logs and, through the chart error, a user; echoing another project's id
+    // would turn a containment failure into a disclosure as well. The expected
+    // id is the caller's own, so it is safe and is what identifies the query.
+    throw new MetricsResponseError(
+      `Telemetry response contains a series belonging to a different project (expected ${projectId}); refusing to render it`,
+    );
+  }
+}
+
 export interface AdaptOptions {
+  /**
+   * The project this query was compiled for.
+   *
+   * Required, not optional: an ownership check a caller can omit is one a
+   * caller eventually omits, and it fails open when they do. Putting it in the
+   * call signature makes every present and future caller state which project it
+   * believes the response belongs to.
+   */
+  projectId: string;
   /** Group-by labels from the compiled query, project label first. */
   groupBy: string[];
   /** Metric name, used when there is nothing to name a series by. */
@@ -166,8 +232,12 @@ export function adaptMatrixToConcreteSeries(
 
   const result = response.data?.result ?? [];
 
-  return result.map((series, index) => {
+  return result.map((series) => {
     const labels = series.metric ?? {};
+
+    // FIRST, before seriesName/breakdownsOf/seriesId strip the label and take
+    // the evidence with it.
+    assertOwnedBy(labels, options.projectId);
 
     const byDate = new Map<string, number>();
     const grid = options.buckets;

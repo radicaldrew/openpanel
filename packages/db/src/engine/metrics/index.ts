@@ -1,5 +1,6 @@
 import {
   type MetricQuery,
+  PROJECT_LABEL,
   compileMetricQuery,
   queryRange,
 } from '@openpanel/gigapipe';
@@ -347,6 +348,10 @@ async function runOnce(
     // The query actually sent, so the UI's "show query" is not a fiction.
     compiled: promql,
     series: adaptMatrixToConcreteSeries(response, {
+      // The same value `compileMetricQuery` was given above, so the adapter
+      // compares the response against the scope that was actually requested
+      // rather than against anything re-derived from the response itself.
+      projectId: input.projectId,
       groupBy: compiled.groupBy,
       metricName: input.name ?? input.query.metric,
       buckets: grid.labels,
