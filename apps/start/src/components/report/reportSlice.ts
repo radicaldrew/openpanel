@@ -19,10 +19,12 @@ import type {
   IInterval,
   IMetricQuery,
   IReport,
+  IReportDataSource,
   IReportOptions,
   UnionOmit,
   zCriteria,
 } from '@openpanel/validation';
+import { isMetricChartType } from '@openpanel/validation';
 import type { z } from 'zod';
 
 type InitialState = IReport & {
@@ -31,6 +33,16 @@ type InitialState = IReport & {
   ready: boolean;
   startDate: string | null;
   endDate: string | null;
+  /**
+   * The metric query of a report that has been switched back to events.
+   *
+   * Editor-only, never persisted: `refineReportDataSource` rejects a report
+   * that carries a metricQuery while `dataSource` is not `'metrics'`, so unlike
+   * the event series — which an events-turned-metrics report keeps lying
+   * dormant in `series` — the query cannot simply stay put. Holding it aside
+   * here is what makes the toggle a look rather than a commitment.
+   */
+  stashedMetricQuery?: IMetricQuery;
   // Always an array in state (initialState + setReport guarantee it) so the
   // reducers below can push/map without optional-chaining.
   globalFilters: IChartEventFilter[];
@@ -58,6 +70,7 @@ const initialState: InitialState = {
   limit: 500,
   options: undefined,
   visibleSeries: undefined,
+  stashedMetricQuery: undefined,
 };
 
 export const reportSlice = createSlice({
@@ -204,6 +217,52 @@ export const reportSlice = createSlice({
     changeInterval: (state, action: PayloadAction<IInterval>) => {
       state.dirty = true;
       state.interval = action.payload;
+    },
+
+    /**
+     * Switch the report between analytics events and server telemetry.
+     *
+     * Both halves of the report are kept, but only one of them can legally be
+     * on the wire at a time. An events report may carry a `series` the metrics
+     * engine ignores — `report.update` writes it back untouched — so the event
+     * side survives a round trip on its own. A `metricQuery` may not: the
+     * superRefine on `report.create`/`report.update` rejects one whenever
+     * `dataSource` is not `'metrics'`, so leaving it in place would turn every
+     * save of an events report into a validation error the user cannot see the
+     * cause of. It moves to `stashedMetricQuery` instead, which the tRPC input
+     * schema strips, so flipping back restores the query the user built rather
+     * than making them build it again.
+     */
+    changeDataSource: (state, action: PayloadAction<IReportDataSource>) => {
+      // `dataSource` is optional and its absence means events, so compare the
+      // normalized value — otherwise every untouched report reads as a change
+      // and gets marked dirty by merely opening the menu.
+      const current = state.dataSource ?? 'events';
+      if (current === action.payload) {
+        return;
+      }
+
+      state.dirty = true;
+      state.dataSource = action.payload;
+
+      if (action.payload === 'metrics') {
+        // Left undefined until a metric is picked, rather than seeded with an
+        // empty-string metric: undefined fails as "A metrics report needs a
+        // metricQuery", which says what to do, where a blank stub fails deep
+        // inside zMetricQuery on `metric` being too short.
+        state.metricQuery = state.stashedMetricQuery;
+        state.stashedMetricQuery = undefined;
+
+        // A metric report has to come back to a chart the metrics engine can
+        // serve; the picker never offers the rest, but a report switched over
+        // from events can be sitting on any of them.
+        if (!isMetricChartType(state.chartType)) {
+          state.chartType = 'linear';
+        }
+      } else {
+        state.stashedMetricQuery = state.metricQuery;
+        state.metricQuery = undefined;
+      }
     },
 
     /**
@@ -479,6 +538,7 @@ export const {
   changeEndDate,
   changeDateRanges,
   changeChartType,
+  changeDataSource,
   changeMetricQuery,
   changeLineType,
   resetDirty,

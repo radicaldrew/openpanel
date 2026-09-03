@@ -2,6 +2,7 @@ import { Card, CardActions, CardActionsItem } from '@/components/card';
 import { FullPageEmptyState } from '@/components/full-page-empty-state';
 import { Button } from '@/components/ui/button';
 import { useAppParams } from '@/hooks/use-app-params';
+import { useDashboardListPageContext } from '@/hooks/use-page-context-helpers';
 import { pushModal, showConfirm } from '@/modals';
 import { cn } from '@/utils/cn';
 import { PAGE_TITLES, createProjectTitle } from '@/utils/title';
@@ -89,6 +90,11 @@ function Component() {
       },
     }),
   );
+
+  // Registered above the empty-state early return, so the chat drawer knows
+  // where the user is even on a project with no dashboards yet — which is
+  // exactly when "make me a dashboard for X" gets asked.
+  useDashboardListPageContext();
 
   if (dashboards.length === 0) {
     return (

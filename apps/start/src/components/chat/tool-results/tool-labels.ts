@@ -245,6 +245,29 @@ const PHRASES: Record<
     done: 'Event filter updated',
   },
 
+  // Metric discovery (server telemetry)
+  list_telemetry_services: {
+    active: 'Looking up services',
+    done: 'Services',
+  },
+  list_metrics: { active: 'Looking up metrics', done: 'Metrics' },
+  describe_metric: { active: 'Inspecting metric', done: 'Metric details' },
+  get_metric_label_values: {
+    active: 'Loading label values',
+    done: 'Label values',
+  },
+
+  // Write intent (client-side). Deliberately NOT "Saving report" / "Report
+  // saved": neither tool writes anything. Both open a dialog and return, and
+  // whether the user then submitted it is something we are never told — a
+  // "done" label reading "Report saved" would be the one claim the prompt
+  // forbids the model from making, made by the UI instead.
+  save_report: { active: 'Opening save dialog', done: 'Save to dashboard' },
+  create_dashboard: {
+    active: 'Opening dashboard dialog',
+    done: 'New dashboard',
+  },
+
   // References
   list_references: {
     active: 'Loading references',

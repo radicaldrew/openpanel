@@ -83,24 +83,41 @@ function ChatReportInner({
           }}
         />
       </div>
-      {value.dashboard_url && (
+      {/* The two halves are independent, and nesting Save inside the
+          `dashboard_url` guard meant it never rendered at all: only a SAVED
+          report carries a `dashboard_url` (`runReport` adds it), and a saved
+          report has an `id`, so the inner `!report.id` was false every time
+          the outer condition was true. Everything the model draws ad-hoc —
+          `generate_report`, its metrics branch, `runReportFromConfig` — comes
+          back with neither key, which is precisely the chart worth saving.
+          Meanwhile the prompt points users at this button. */}
+      {(value.dashboard_url || !report.id) && (
         <div className="border-t px-3 py-1.5 flex items-center justify-between gap-2">
-          <a
-            href={value.dashboard_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-muted-foreground hover:underline"
-          >
-            Open in dashboard →
-          </a>
+          {value.dashboard_url && (
+            <a
+              href={value.dashboard_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-muted-foreground hover:underline"
+            >
+              Open in dashboard →
+            </a>
+          )}
           {!report.id && (
             <Button
               size="sm"
               variant="ghost"
-              className="h-6 text-sm"
+              className="h-6 text-sm ml-auto"
               onClick={() =>
                 pushModal('SaveReport', {
-                  report: report as unknown as IReport,
+                  report: {
+                    // The chart tools echo back a report CONFIG, which has no
+                    // name — the title lives beside it in the result. Without
+                    // this the dialog opens with an empty, required name field
+                    // on a chart the user can already see the title of.
+                    ...report,
+                    name: typeof report.name === 'string' ? report.name : title,
+                  } as unknown as IReport,
                   disableRedirect: true,
                 })
               }

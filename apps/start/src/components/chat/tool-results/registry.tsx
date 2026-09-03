@@ -8,6 +8,10 @@ import {
   SetEventNamesFilterResult,
   SetPropertyFiltersResult,
 } from './chat-ui-apply-result';
+import {
+  ChatCreateDashboardResult,
+  ChatSaveReportResult,
+} from './chat-write-result';
 import { DefaultToolResult } from './default-tool-result';
 import type { ToolResultProps } from './types';
 
@@ -60,6 +64,13 @@ export const chatToolRenderers: Record<string, FC<ToolResultProps>> = {
   'tool-apply_filters': ApplyFiltersResult,
   'tool-set_property_filters': SetPropertyFiltersResult,
   'tool-set_event_names_filter': SetEventNamesFilterResult,
+
+  // Write intent — also client-side, but these two propose a change to the
+  // user's project rather than to the current view, so they get a card that
+  // names what would be written and can re-open the dialog. The default
+  // renderer's "Done" chip would claim a write that has not happened.
+  'tool-save_report': ChatSaveReportResult,
+  'tool-create_dashboard': ChatCreateDashboardResult,
 };
 
 export { DefaultToolResult } from './default-tool-result';

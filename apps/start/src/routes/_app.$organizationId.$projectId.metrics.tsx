@@ -5,6 +5,7 @@ import { MetricQueryEditor } from '@/components/report/metric-query-editor';
 import { ReportInterval } from '@/components/report/ReportInterval';
 import { TimeWindowPicker } from '@/components/time-window-picker';
 import { Badge } from '@/components/ui/badge';
+import { useMetricsPageContext } from '@/hooks/use-page-context-helpers';
 import { useTRPC } from '@/integrations/trpc/react';
 import { Button } from '@/components/ui/button';
 import { pushModal } from '@/modals';
@@ -52,6 +53,13 @@ function Component() {
   const [startDate, setStartDate] = useState<string | null>(null);
   const [endDate, setEndDate] = useState<string | null>(null);
   const [interval, setInterval] = useState<IInterval>('hour');
+
+  // Tell the chat drawer (mounted globally in `_app.tsx`) which page this is
+  // and, crucially, which window it is drawing — the controls above are local
+  // state, so nothing else on the page would reveal it. Registered before the
+  // early returns below so the empty and not-configured states still announce
+  // the page; the assistant can talk about telemetry setup there too.
+  useMetricsPageContext({ range, startDate, endDate, interval });
 
   const enabled = useQuery(trpc.observability.enabled.queryOptions());
   const telemetryOn = enabled.data?.enabled ?? false;

@@ -9,7 +9,11 @@ import {
   useEventQueryNamesFilter,
 } from './use-event-query-filters';
 import { useAppParams } from './use-app-params';
-import type { IReportInput } from '@openpanel/validation';
+import type {
+  IChartRange,
+  IInterval,
+  IReportInput,
+} from '@openpanel/validation';
 
 /**
  * For pages that share the standard date-range / interval filters
@@ -87,6 +91,61 @@ export function useDashboardPageContext(
       interval: interval ?? undefined,
     },
     ...(primer ? { primer } : {}),
+  });
+}
+
+/**
+ * For the metrics explorer.
+ *
+ * It cannot use `useRangePageContext`, and the difference is not cosmetic:
+ * that helper reads the window from `useOverviewOptions`, i.e. from the URL,
+ * and the metrics page keeps its range, custom dates and interval in local
+ * React state — none of it is in the URL. Registering through it would tell
+ * the model "Date range: 30d" (the nuqs default) while the page is drawing 7d,
+ * and the model would then compose a chart over a window the user never chose
+ * and describe it back as the one on screen. So the page passes what it is
+ * actually rendering.
+ *
+ * No `eventNames` / `eventFilters` either — the metrics page has neither, and
+ * the same fact keeps the UI-mutator tools off this page's tool set (see
+ * `case 'metrics'` in apps/api/src/agents/tools/index.ts).
+ */
+export function useMetricsPageContext(view: {
+  range: IChartRange;
+  startDate: string | null;
+  endDate: string | null;
+  interval: IInterval;
+}) {
+  const { projectId, organizationId } = useAppParams();
+
+  usePageContext({
+    page: 'metrics',
+    route: { projectId, organizationId },
+    filters: {
+      range: view.range,
+      startDate: view.startDate ?? undefined,
+      endDate: view.endDate ?? undefined,
+      interval: view.interval,
+    },
+  });
+}
+
+/**
+ * For the dashboards LIST page.
+ *
+ * Same `page` value as the detail route but with no `dashboardId`, which is
+ * exactly how `composeChatTools` tells them apart: without an id there is no
+ * dashboard to summarize and none of the filters the UI-mutator tools push, so
+ * the list page gets the base set. It is worth registering anyway — "create a
+ * dashboard called X" is a natural ask here, and until now this page sent no
+ * context at all, so the model was not even told where the user was standing.
+ */
+export function useDashboardListPageContext() {
+  const { projectId, organizationId } = useAppParams();
+
+  usePageContext({
+    page: 'dashboard',
+    route: { projectId, organizationId },
   });
 }
 
