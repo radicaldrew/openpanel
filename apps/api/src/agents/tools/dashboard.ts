@@ -93,12 +93,21 @@ export const summarizeDashboard = chatTool(
           const { startDate, endDate } = getChartStartEndDate(merged, timezone);
           const chartInput = { ...merged, startDate, endDate, timezone };
 
+          // `dataSource` is checked before chartType, the same ordering
+          // `getReportDataCore` and the MCP read path use: only
+          // `ChartEngine.execute` branches on a metrics report, while the
+          // aggregate engine iterates `series`, which a metric card does not
+          // have — so it returns an EMPTY chart and no error, and the model
+          // summarizes a working panel as "no data".
           let data: unknown;
           if (report.chartType === 'funnel') {
             data = await funnelService.getFunnel(
               chartInput as Parameters<typeof funnelService.getFunnel>[0],
             );
-          } else if (report.chartType === 'metric') {
+          } else if (
+            report.chartType === 'metric' &&
+            report.dataSource !== 'metrics'
+          ) {
             data = await AggregateChartEngine.execute(chartInput);
           } else {
             data = await ChartEngine.execute(chartInput);

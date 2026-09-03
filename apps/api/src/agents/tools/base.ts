@@ -1,11 +1,23 @@
 import {
+  chartSegments,
   chartTypes,
+  intervals,
   lineTypes,
+  metrics,
   operators,
 } from '@openpanel/constants';
-import { objectToZodEnums, zReportInput } from '@openpanel/validation';
+import {
+  isMetricChartType,
+  METRIC_CHART_TYPES,
+  objectToZodEnums,
+  stampSeriesDiscriminator,
+  zMetricQuery,
+  zReportDataSource,
+  zReportInput,
+} from '@openpanel/validation';
 import { z } from 'zod';
 import {
+  ChartEngine,
   findProfilesCore,
   getAnalyticsOverviewCore,
   getEventPropertyValuesCore,
@@ -22,6 +34,7 @@ import {
   queryEventsCore,
   querySessionsCore,
 } from '@openpanel/db';
+import { isGigapipeEnabled } from '@openpanel/gigapipe';
 import { runReport, runReportFromConfig } from '@openpanel/mcp';
 import {
   chatTool,
@@ -145,12 +158,60 @@ export const getReportData = chatTool(
     }),
 );
 
+/**
+ * The model-facing metric query.
+ *
+ * Extended from the canonical `zMetricQuery` rather than hand-rolled. That shape
+ * already exists in three places in this repo (validation, the observability
+ * router, the PromQL compiler's own interface) and a fourth copy would drift
+ * silently; `.extend` re-describes fields without redeclaring their
+ * constraints, so a rename upstream becomes a compile error here instead of a
+ * tool definition that quietly stops matching what the engine accepts.
+ *
+ * Everything added here is prose, and for metrics the prose is load-bearing:
+ * a model that picks the wrong `fn` gets a flat zero line, not an error.
+ */
+const metricQuerySchema = zMetricQuery.extend({
+  metric: zMetricQuery.shape.metric.describe(
+    'Prometheus metric name exactly as the service exports it — e.g. `http_requests_total`, `process_resident_memory_bytes`, `queue_depth`. Letters, digits and underscores only (a `:` is rejected). Verify it with list_metrics first: an unknown name returns an empty chart rather than an error, so a guessed name fails silently.',
+  ),
+  matchers: zMetricQuery.shape.matchers.describe(
+    'Label filters, ANDed together. `operator` is `eq`/`neq` for an exact value, `match`/`notMatch` for an RE2 regex — e.g. `{ name: "status", operator: "match", value: "5.." }` to keep only 5xx. Max 20.',
+  ),
+  // `.removeDefault()` makes `fn` required for the model. Upstream it defaults
+  // to `rate` because the UI picks a kind-aware default before the user ever
+  // sees the control; here there is nothing between the model and the query,
+  // and `rate` on a steady gauge is ALWAYS zero — a flat line indistinguishable
+  // from "no data". Forcing the model to state it is the difference between a
+  // chart that answers the question and one that silently answers nothing.
+  fn: zMetricQuery.shape.fn
+    .removeDefault()
+    .describe(
+      'How the stored series becomes a charted value. It depends on what the metric measures. Counter (name ends `_total`/`_count`/`_sum`, value only ever climbs): `rate` for "how fast" (per second) or `increase` for "how many across the window". Gauge (everything else — `up`, `queue_depth`, `go_goroutines`, `*_bytes`): `raw` for the level, `delta` only when the question is how much it MOVED. `rate` on a gauge draws a flat zero line that looks exactly like an empty chart.',
+    ),
+  aggregation: zMetricQuery.shape.aggregation.describe(
+    'How the per-instance series combine into lines. `sum` for a counter split across pods/instances, `avg`/`max`/`min` for a gauge you want the typical or worst value of, `count` counts SERIES (not events) and is almost never what is meant. `p50`/`p90`/`p95`/`p99` compute a histogram quantile and REQUIRE a metric ending in `_bucket` — they hard-error on anything else.',
+  ),
+  groupBy: zMetricQuery.shape.groupBy.describe(
+    'Label names to split into one line each — the metric equivalent of `breakdowns`, max 5. Only labels this metric actually carries (`service`, `job`, `instance`, `status`, `pod`, …); an unknown label just collapses everything into a single line. Omit for one aggregated line.',
+  ),
+  window: zMetricQuery.shape.window.describe(
+    'Prometheus duration backing `rate`/`increase`/`delta`, e.g. `5m`. OMIT IT unless the user asked for a specific window: the engine sizes it against the chart interval, and a window narrower than the step samples the gaps and draws a sawtooth that reads as real instability.',
+  ),
+});
+
+
 export const generateReport = chatTool(
   {
     name: 'generate_report',
     description: [
-      "Generate an ad-hoc chart from a report config. Use only when no saved report fits. Always call list_event_names first to verify event names exist; call list_event_properties if you need a breakdown property. ALWAYS supply a concise `title` (3-8 words) describing what the chart shows.",
+      'Generate an ad-hoc chart from a report config. Use only when no saved report fits. ALWAYS supply a concise `title` (3-8 words) describing what the chart shows.',
       '',
+      'TWO DATA SOURCES, picked with `dataSource`:',
+      '- `events` (the default — omit the field) — OpenPanel product analytics, described by `series`. Always call list_event_names first to verify event names exist; call list_event_properties if you need a breakdown property.',
+      '- `metrics` — server telemetry (Prometheus-style) from the observability stack: request rates, latency, memory, queue depth, error counts. Described by `metricQuery` alone; `series` and `breakdowns` do not apply. Call list_metrics first to see what this project actually exports, and describe_metric for a metric\'s labels — never guess a metric name. `dataSource` and `metricQuery` always travel together; one without the other is rejected.',
+      '',
+      'EVENT REPORTS',
       'Series are ordered A, B, C, … (based on array index). Use the letter id from a `formula` series like "A / B * 100" for ratios or conversions.',
       '',
       'Examples:',
@@ -158,98 +219,180 @@ export const generateReport = chatTool(
       '- **Revenue per day**: one event series with `segment: "property_sum"` + `property: "revenue"`.',
       '- **Conversion rate over time**: two event series (A = completed, B = started) + a `formula` series `"A / B * 100"` with all three visible, or set `hideSeries: ["A","B"]` to show only the rate.',
       '- **Period-over-period**: set `previous: true` to overlay the prior period of equal length.',
+      '',
+      'METRIC REPORTS',
+      "A metric's name tells you how to read it, and picking `fn` wrong is the one mistake that yields a chart instead of an error:",
+      '- Counter — name ends `_total`, `_count` or `_sum`. The stored value only ever climbs, so chart its change: `fn: "rate"` for "how fast" (per second), `fn: "increase"` for "how many during the window". `fn: "raw"` on a counter plots an ever-rising line that says more about process uptime than about traffic.',
+      '- Gauge — everything else (`up`, `queue_depth`, `go_goroutines`, `process_resident_memory_bytes`). The stored value already IS the level, so `fn: "raw"`; use `fn: "delta"` only when the question is how much it moved. `rate` on a steady gauge is always zero and draws a flat line indistinguishable from "no data".',
+      '- Histogram — name ends `_bucket`. Ask for a percentile through `aggregation` (`p50`/`p90`/`p95`/`p99`) with `fn: "rate"`. Percentiles REQUIRE the `_bucket` series and hard-error on anything else, so chart `http_request_duration_seconds_bucket`, never `http_request_duration_seconds`.',
+      '',
+      '`aggregation` combines the per-instance series: `sum` for a counter split across pods, `avg`/`max`/`min` for a gauge, `count` counts series rather than events, percentiles for `_bucket` metrics only. `groupBy` splits into one line per label value (the breakdown equivalent, max 5). `matchers` filter by label. Omit `window` — the engine sizes it against the interval.',
+      '',
+      'Examples:',
+      '- **Request rate per service**: `dataSource: "metrics"`, `metricQuery: { metric: "http_requests_total", fn: "rate", aggregation: "sum", groupBy: ["service"] }`, `chartType: "linear"`.',
+      '- **p95 latency**: `metricQuery: { metric: "http_request_duration_seconds_bucket", fn: "rate", aggregation: "p95" }`, `chartType: "linear"`, `unit: "s"`.',
+      '- **Memory per pod**: `metricQuery: { metric: "process_resident_memory_bytes", fn: "raw", aggregation: "max", groupBy: ["pod"] }` — a gauge, so `raw`.',
+      '- **5xx responses in the window**: `metricQuery: { metric: "http_requests_total", fn: "increase", aggregation: "sum", matchers: [{ name: "status", operator: "match", value: "5.." }] }`, `chartType: "metric"`.',
     ].join('\n'),
     schema: z.object({
+      dataSource: zReportDataSource
+        .optional()
+        .describe(
+          'Where the numbers come from. Omit it (or send `events`) for OpenPanel product analytics described by `series`. Send `metrics` to chart server telemetry, described by `metricQuery` instead — see the METRIC REPORTS section above for how to pick `fn`.',
+        ),
+      metricQuery: metricQuerySchema
+        .optional()
+        .describe(
+          'The telemetry query to chart. REQUIRED when `dataSource` is "metrics", and rejected when it is not — a query on an events report is never looked at, so it is treated as a mistake rather than ignored.',
+        ),
       chartType: z
         .enum(objectToZodEnums(chartTypes))
         .describe(
-          'Chart type. See the decision table in the system prompt — pick `linear`/`area` for trends, `bar`/`pie`/`map` for breakdowns, `metric` for a single number, `funnel`/`conversion`/`sankey` for flows, `retention` for cohorts, `histogram` for numeric distributions.',
+          'Chart type. See the decision table in the system prompt — pick `linear`/`area` for trends, `bar`/`pie`/`map` for breakdowns, `metric` for a single number, `funnel`/`conversion`/`sankey` for flows, `retention` for cohorts, `histogram` for numeric distributions. A `metrics` report can only use `linear`, `area`, `histogram` or `metric`; the rest never reach the metrics engine and render an empty panel.',
         ),
-      interval: z
-        .enum(['minute', 'hour', 'day', 'week', 'month'])
-        .default('day'),
+      // Derived from `intervals`, not re-listed, for the same reason
+      // `chartType` above derives from `chartTypes`: this is a model-facing
+      // copy of a value set the engine owns. A hand-written copy that falls
+      // behind offers the model an interval the `zReportInput` parse below
+      // rejects — or, when a value is added upstream, hides one that works.
+      interval: z.enum(objectToZodEnums(intervals)).default('day'),
       startDate: z.string().describe('ISO date YYYY-MM-DD'),
       endDate: z.string().describe('ISO date YYYY-MM-DD'),
       series: z
         .array(
-          z.union([
-            z.object({
-              type: z.literal('event'),
-              name: z.string().describe('Event name — verify with list_event_names'),
-              displayName: z.string().optional(),
-              segment: z
-                .enum([
-                  'event',
-                  'user',
-                  'session',
-                  'group',
-                  'user_average',
-                  'one_event_per_user',
-                  'property_sum',
-                  'property_average',
-                  'property_max',
-                  'property_min',
-                ])
-                .default('event')
-                .optional()
-                .describe(
-                  [
-                    'How to segment/aggregate the event:',
-                    '- `event` — every event firing (default, "all events")',
-                    '- `user` — unique users (e.g. for DAU/MAU)',
-                    '- `session` — unique sessions',
-                    '- `group` — unique groups/accounts',
-                    '- `user_average` — average events per user',
-                    '- `one_event_per_user` — count users who did it at least once',
-                    '- `property_sum` / `property_average` / `property_max` / `property_min` — aggregate a numeric property from the event (requires `property`)',
-                  ].join('\n'),
-                ),
-              property: z
-                .string()
-                .optional()
-                .describe(
-                  'Numeric property on the event to aggregate. Required when segment is `property_sum`/`average`/`max`/`min`. Example: `revenue`, `duration`, `score`.',
-                ),
-              filters: z
-                .array(
-                  z.object({
-                    name: z
-                      .string()
-                      .describe(
-                        'Field to filter on — verify with list_event_properties. Use the bare column name for top-level columns (e.g. `path`, `country`, `device`) or `properties.<key>` for custom JSON properties (e.g. `properties.plan`).',
-                      ),
-                    operator: z
-                      .enum(objectToZodEnums(operators))
-                      .describe(
-                        'One of: is, isNot, contains, doesNotContain, startsWith, endsWith, regex, isNull, isNotNull, gt, lt, gte, lte. `is` is the default for equality (NOT `equals` / `eq` / `==`).',
-                      ),
-                    value: z
-                      .array(z.union([z.string(), z.number(), z.boolean(), z.null()]))
-                      .describe('Values to match. Use [] with isNull/isNotNull.'),
-                  }),
-                )
-                .default([])
-                .optional(),
-            }),
-            z.object({
-              type: z.literal('formula'),
-              formula: z
-                .string()
-                .describe(
-                  'Expression referencing other series by letter id. Examples: `A / B * 100` (conversion rate), `A + B` (union total), `A - B` (difference). Earlier series are A, B, C, …',
-                ),
-              displayName: z.string().optional(),
-              hideSeries: z
-                .array(z.string())
-                .optional()
-                .describe(
-                  'Letter ids (e.g. ["A", "B"]) of series used by the formula that should be hidden from the chart — useful when you only want to display the computed ratio.',
-                ),
-            }),
-          ]),
+          // THE DISCRIMINATOR REPAIR HAS TO LIVE HERE TOO, NOT ONLY ON
+          // `zChartEventItem` IN @openpanel/validation.
+          //
+          // better-agent validates the model's raw arguments against THIS
+          // schema (run/execute-tool-calls.mjs -> validateInput ->
+          // `~standard.validate`) and passes the parsed value to the handler,
+          // so the canonical `zReportInput` parse further down only ever sees
+          // input that already got past this point. An LLM routinely omits
+          // `type` on an event series — the field carries no information from
+          // where the model sits, since only a formula has to announce itself
+          // — and without this the whole call came back as `invalid_union` at
+          // `series.0`, carrying BOTH branches' errors, before the handler
+          // could return anything the agent loop could act on.
+          //
+          // Deliberately NOT `zChartEventItem` itself, even though the repair
+          // is identical: every description below is prompt text written for
+          // this tool (verify names with list_event_names, the segment menu,
+          // the `properties.<key>` filter convention), and the canonical shape
+          // also exposes an `id` that the handler overwrites with a letter id.
+          // Only the PROSE is allowed to differ — each value set below is
+          // pinned to the same constant the canonical schema derives from.
+          //
+          // `z.literal('event').default('event')` is not an alternative: zod 4
+          // reads a discriminated union's discriminator off the raw input,
+          // before any field-level default runs (verified on 4.3.6). The union
+          // stays discriminated rather than becoming a plain `z.union` so a
+          // genuinely malformed event still comes back as the one field-level
+          // issue the model can act on.
+          //
+          // The one cost, measured against the schema better-agent actually
+          // emits: wrapping the element in a pipe makes zod drop the enclosing
+          // array's `"default": []` from the generated JSON Schema (the branch
+          // `oneOf` and its `const` discriminators are unchanged, and `series`
+          // stays out of `required`). That default was advisory only — the
+          // handler reads `input.series ?? []` and the description already
+          // says to omit the field for a metrics report.
+          // The same helper `zChartEventItem` uses, not a second copy of it.
+          // A copy would drift silently: both schemas keep parsing, the model
+          // just starts getting "No matching discriminator" back on one path
+          // and not the other.
+          z.preprocess(
+            stampSeriesDiscriminator,
+            z.discriminatedUnion('type', [
+              z.object({
+                type: z.literal('event'),
+                name: z.string().describe('Event name — verify with list_event_names'),
+                displayName: z.string().optional(),
+                // `chartSegments`, not a copy of it. The prose below is this
+                // tool's own, but the VALUES have to be exactly what
+                // `zChartEventSegment` accepts: a segment the model can send but
+                // the canonical parse rejects fails in the handler as a bare zod
+                // path, and one that exists upstream but is missing here is
+                // simply unreachable from chat.
+                segment: z
+                  .enum(objectToZodEnums(chartSegments))
+                  .default('event')
+                  .optional()
+                  .describe(
+                    [
+                      'How to segment/aggregate the event:',
+                      '- `event` — every event firing (default, "all events")',
+                      '- `user` — unique users (e.g. for DAU/MAU)',
+                      '- `session` — unique sessions',
+                      '- `group` — unique groups/accounts',
+                      '- `user_average` — average events per user',
+                      '- `one_event_per_user` — count users who did it at least once',
+                      '- `property_sum` / `property_average` / `property_max` / `property_min` — aggregate a numeric property from the event (requires `property`)',
+                    ].join('\n'),
+                  ),
+                property: z
+                  .string()
+                  .optional()
+                  .describe(
+                    'Numeric property on the event to aggregate. Required when segment is `property_sum`/`average`/`max`/`min`. Example: `revenue`, `duration`, `score`.',
+                  ),
+                filters: z
+                  .array(
+                    z.object({
+                      name: z
+                        .string()
+                        .describe(
+                          'Field to filter on — verify with list_event_properties. Use the bare column name for top-level columns (e.g. `path`, `country`, `device`) or `properties.<key>` for custom JSON properties (e.g. `properties.plan`).',
+                        ),
+                      // `inCohort`/`notInCohort` are excluded, not merely left
+                      // out of the description. They need a `cohortIds` on the
+                      // filter, which this tool has no field for, and
+                      // `buildCohortClause` returns null for a cohort filter
+                      // with no ids — the filter is DROPPED from the SQL, so the
+                      // model gets an unfiltered chart it then describes to the
+                      // user as filtered. Not offering them is the only outcome
+                      // that fails visibly.
+                      operator: z
+                        .enum(objectToZodEnums(operators))
+                        .exclude(['inCohort', 'notInCohort'])
+                        .describe(
+                          'One of: is, isNot, contains, doesNotContain, startsWith, endsWith, regex, isNull, isNotNull, gt, lt, gte, lte. `is` is the default for equality (NOT `equals` / `eq` / `==`).',
+                        ),
+                      value: z
+                        .array(z.union([z.string(), z.number(), z.boolean(), z.null()]))
+                        .describe('Values to match. Use [] with isNull/isNotNull.'),
+                    }),
+                  )
+                  .default([])
+                  .optional(),
+              }),
+              z.object({
+                type: z.literal('formula'),
+                formula: z
+                  .string()
+                  .describe(
+                    'Expression referencing other series by letter id. Examples: `A / B * 100` (conversion rate), `A + B` (union total), `A - B` (difference). Earlier series are A, B, C, …',
+                  ),
+                displayName: z.string().optional(),
+                hideSeries: z
+                  .array(z.string())
+                  .optional()
+                  .describe(
+                    'Letter ids (e.g. ["A", "B"]) of series used by the formula that should be hidden from the chart — useful when you only want to display the computed ratio.',
+                  ),
+              }),
+            ]),
+          ),
         )
-        .min(1)
-        .describe('At least one series. Mix event series and formula series to compute ratios.'),
+        // The `.min(1)` that used to sit here now lives in the handler. A
+        // metrics report has no series at all, and a schema-level minimum would
+        // leave the model no way to satisfy it except by inventing an event.
+        // A JSON-Schema violation is also rejected before the handler runs, so
+        // the agent loop would never see an explanation it could act on.
+        .default([])
+        .optional()
+        .describe(
+          'The event series to chart — at least one is REQUIRED for an events report. Mix event series and formula series to compute ratios. Leave it out entirely when `dataSource` is "metrics": a metric report is described by `metricQuery` alone, and anything sent here is dropped.',
+        ),
       breakdowns: z
         .array(
           z.object({
@@ -262,7 +405,7 @@ export const generateReport = chatTool(
       // indistinguishable from an explicit `sum`, and the fallback depends on
       // the chart type (see below).
       metric: z
-        .enum(['sum', 'count', 'average', 'min', 'max'])
+        .enum(objectToZodEnums(metrics))
         .optional()
         .describe(
           'How a series is aggregated for display. Only the metric and map chart types read this; `count` is unique profiles. Omit it unless the user asked for a specific aggregation — metric cards then default to unique profiles.',
@@ -289,11 +432,19 @@ export const generateReport = chatTool(
         .string()
         .optional()
         .describe('Y-axis unit suffix, e.g. `%`, `$`, `ms`, `users`.'),
+      // `session_id` / `profile_id`, not `session` / `profile`.
+      // `FunnelService.getFunnelGroup` compares against the literal
+      // `'profile_id'` and falls back to `session_id` for everything else, so
+      // `'profile'` never selected a profile funnel — it silently drew a
+      // session one, and the description promising a profile default made that
+      // the likelier of the two. These are also the values the report editor's
+      // own control reads back (ReportSettings: `funnelGroup || 'session_id'`),
+      // so a funnel saved from chat now round-trips.
       funnelGroup: z
-        .enum(['session', 'profile'])
+        .enum(['session_id', 'profile_id'])
         .optional()
         .describe(
-          'Only for `chartType: "funnel"`. Whether each funnel step counts by unique session or unique profile. Default is profile.',
+          'Only for `chartType: "funnel"`. Whether each funnel step counts by unique session (`session_id`) or unique profile (`profile_id`). Defaults to `session_id`.',
         ),
       title: z
         .string()
@@ -304,8 +455,73 @@ export const generateReport = chatTool(
     }),
   },
   async (input, context) => {
+    const isMetrics = input.dataSource === 'metrics';
+
+    // Telemetry is optional per deployment, but `generate_report` is a BASE
+    // tool: unlike the four in metrics.ts it is offered on every page of every
+    // install, so `dataSource: "metrics"` is reachable on an events-only one.
+    // Without this the metrics branch below runs `ChartEngine.execute` ->
+    // `executeMetricChart` -> gigapipe's `queryRange`, which throws
+    // `GigapipeNotConfiguredError` — a hard tool failure the agent loop cannot
+    // act on. Returned rather than thrown, and worded the way
+    // `telemetryUnavailable()` words it in metrics.ts (that helper is
+    // module-private there, so the check is repeated rather than imported),
+    // so the model can tell the user and move on.
+    if (isMetrics && !isGigapipeEnabled()) {
+      return {
+        error:
+          'Telemetry is not configured on this deployment — there are no metrics to chart. Tell the user rather than retrying.',
+      };
+    }
+
+    // The same cross-field rule the validation layer enforces as
+    // `refineReportDataSource`. Repeated here rather than left to the
+    // `zReportInput` parse below, because that rule is a standalone refinement
+    // the schema itself does not carry — and because a Zod issue list is a poor
+    // prompt: `path: "metricQuery"` tells the model where the problem is, not
+    // what to send instead. Neither half is meaningful alone and neither
+    // failure announces itself; both render an empty panel with no error.
+    if (isMetrics && !input.metricQuery) {
+      return {
+        error:
+          'A metrics report is described entirely by `metricQuery`, and none was sent. Call generate_report again with `metricQuery: { metric, fn, aggregation }` — or drop `dataSource` and describe the chart with `series` if you meant an events report.',
+        dataSource: 'metrics',
+      };
+    }
+    if (input.metricQuery && !isMetrics) {
+      return {
+        error:
+          'A `metricQuery` only runs when `dataSource` is "metrics". As sent it would be ignored and the chart would come back empty, so call generate_report again with `dataSource: "metrics"` — or remove `metricQuery` and describe the chart with `series`.',
+        dataSource: input.dataSource ?? 'events',
+      };
+    }
+    // The shared list, not a local one: `save_report` and the report editor
+    // narrow to exactly these four, and a type this tool renders ad-hoc but
+    // the editor cannot draw is a chart the user is told to save and then
+    // finds empty.
+    if (isMetrics && !isMetricChartType(input.chartType)) {
+      return {
+        error: `chartType "${input.chartType}" cannot draw a metric series — bar and pie run through the aggregate engine, and funnel/retention/conversion/sankey/map are shaped by event data, none of which a metric query produces. Each renders an empty panel rather than an error. Call generate_report again with one of: ${METRIC_CHART_TYPES.join(', ')}.`,
+        chartType: input.chartType,
+      };
+    }
+
+    const rawSeries: unknown[] = input.series ?? [];
+
+    if (!isMetrics && rawSeries.length === 0) {
+      return {
+        error:
+          'An events report needs at least one entry in `series`. Add an event series (call list_event_names first to verify the name), or set `dataSource: "metrics"` with a `metricQuery` if you meant to chart server telemetry.',
+      };
+    }
+
+    // A metrics report is described entirely by `metricQuery` — the metric
+    // branch of the engine never reads `series` or `breakdowns`
+    // (packages/db/src/engine/index.ts). Empty them here rather than pass them
+    // through, so a stray series cannot make the config we echo back — and that
+    // a later "save this to a dashboard" would persist — disagree with what ran.
     // biome-ignore lint/suspicious/noExplicitAny: union discrimination between event/formula series is easier to do explicitly
-    const series = (input.series as any[]).map((s: any, i: number) => {
+    const series = (isMetrics ? [] : rawSeries).map((s: any, i: number) => {
       const id = ALPHABET_IDS[i] ?? String(i + 1);
       if (s?.type === 'formula') {
         return {
@@ -334,17 +550,23 @@ export const generateReport = chatTool(
 
     const config = {
       projectId: context.projectId,
+      // Conditional spread so an events config stays byte-identical to before:
+      // `dataSource: undefined` is not the same as an absent key once this
+      // object is echoed back as `report` and possibly saved.
+      ...(isMetrics
+        ? { dataSource: 'metrics' as const, metricQuery: input.metricQuery }
+        : {}),
       chartType: input.chartType,
       interval: input.interval,
       startDate: input.startDate,
       endDate: input.endDate,
       series,
-      breakdowns: (input.breakdowns ?? []).map(
-        (b: { name: string }, i: number) => ({
-          id: String(i + 1),
-          name: b.name,
-        }),
-      ),
+      breakdowns: isMetrics
+        ? []
+        : (input.breakdowns ?? []).map((b: { name: string }, i: number) => ({
+            id: String(i + 1),
+            name: b.name,
+          })),
       range: 'custom' as const,
       // A metric card has always shown the total unique count, so an
       // unspecified metric must stay `count` there — `sum` would silently turn
@@ -370,6 +592,32 @@ export const generateReport = chatTool(
           path: i.path.join('.'),
           message: i.message,
         })),
+      };
+    }
+
+    if (isMetrics) {
+      // `runReportFromConfig` dispatches on chartType, and only `ChartEngine`
+      // (executeChart) branches on dataSource. The funnel service and the
+      // aggregate engine it would pick for chartType `funnel`/`metric` never
+      // look at dataSource — they would run the events pipeline over an empty
+      // series and hand back an empty chart with no error. So route the metric
+      // path straight at executeChart rather than teach three engines about
+      // metrics, and return the keys runReportFromConfig returns so the
+      // frontend report renderer stays unaware there are two data sources.
+      const data = await ChartEngine.execute(parsed.data);
+      return {
+        ...(input.title?.trim() ? { name: input.title.trim() } : {}),
+        chartType: parsed.data.chartType,
+        interval: parsed.data.interval,
+        startDate: input.startDate,
+        endDate: input.endDate,
+        report: parsed.data,
+        data,
+        ...(rawSeries.length > 0 || (input.breakdowns?.length ?? 0) > 0
+          ? {
+              note: '`series` and `breakdowns` were ignored — a metrics report is described by `metricQuery` alone. To split it into several lines use `metricQuery.groupBy`.',
+            }
+          : {}),
       };
     }
 
@@ -692,8 +940,20 @@ export const getFunnel = chatTool(
       metric: 'sum' as const,
       previous: false,
       breakdowns: [],
-      funnelGroup: groupBy ?? 'session_id',
-      funnelWindowSeconds: (windowHours ?? 24) * 3600,
+      // Both settings belong under `options`, and in these units.
+      // `FunnelService.getFunnel` reads them as
+      // `options?.type === 'funnel' ? options : undefined` and nowhere else,
+      // so the top-level `funnelGroup` / `funnelWindowSeconds` this used to
+      // send were dropped on the floor: the chart was always a 24-hour session
+      // funnel while `numbers` above honoured `groupBy` / `windowHours`, and
+      // the two halves of one tool result disagreed with no error.
+      // `funnelWindow` is in HOURS (buildFunnelBase multiplies by 3600 * 1000),
+      // so pass hours, not seconds.
+      options: {
+        type: 'funnel' as const,
+        funnelGroup: groupBy ?? 'session_id',
+        funnelWindow: windowHours ?? 24,
+      },
       series: (steps as string[]).map((name: string, i: number) => ({
         id: String(i + 1),
         type: 'event' as const,
