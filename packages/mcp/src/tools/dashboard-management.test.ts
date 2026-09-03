@@ -27,8 +27,20 @@ const mockGetDashboardById = vi.hoisted(() => vi.fn());
 const mockGetProjectById = vi.hoisted(() => vi.fn());
 const mockGetId = vi.hoisted(() => vi.fn());
 
-vi.mock('@openpanel/db', () => ({
-  Prisma: { DbNull: { kind: 'DbNull' } },
+// A PARTIAL mock: everything that talks to a database is replaced, everything
+// that is pure is the real thing.
+//
+// `reportWriteData` is the single definition of the report column list that
+// create_report and update_report now share. Hand-stubbing it here would
+// recreate the very fourth copy that helper exists to delete — the stub could
+// drift from the real column list and these tests would keep passing while the
+// server wrote the wrong columns. So it comes from the real module.
+//
+// `Prisma` comes from the real module for the same reason. `reportWriteData`
+// closes over the real `Prisma.DbNull`, so a fake one here would only reach
+// duplicate_report, leaving two different spellings of SQL NULL in one suite.
+vi.mock('@openpanel/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@openpanel/db')>()),
   db: mockDb,
   getDashboardById: mockGetDashboardById,
   getProjectById: mockGetProjectById,
@@ -103,6 +115,8 @@ const REPORT = {
   projectId: 'project-1',
   dashboardId: 'dashboard-1',
   name: 'Signups',
+  dataSource: 'events',
+  metricQuery: null,
   events: [],
   globalFilters: [],
   interval: 'day',
@@ -119,6 +133,26 @@ const REPORT = {
   startDate: null,
   endDate: null,
   layout: null,
+};
+
+/**
+ * A stored METRIC row. The bug these fixtures defend against is a metric report
+ * silently becoming an events report with an empty series — a panel that draws
+ * nothing and reports no error — so every path that copies report columns needs
+ * a row where `dataSource`/`metricQuery` are actually set to something.
+ */
+const METRIC_QUERY = {
+  metric: 'http_request_duration_seconds',
+  matchers: [],
+  fn: 'rate' as const,
+  aggregation: 'p95' as const,
+  groupBy: ['route'],
+};
+
+const METRIC_REPORT = {
+  ...REPORT,
+  dataSource: 'metrics',
+  metricQuery: METRIC_QUERY,
 };
 
 const EVENT_WITH_TYPED_COHORT_FILTER = {
@@ -437,6 +471,110 @@ describe('dashboard management behavior', () => {
         startDate: '2026-01-01',
         endDate: '2026-01-31',
         events: [EVENT_WITH_TYPED_COHORT_FILTER],
+      }),
+    });
+  });
+
+  it('writes dataSource and metricQuery when creating a metric report', async () => {
+    const server = register();
+
+    await server.invoke('create_report', {
+      projectId: 'project-1',
+      dashboardId: 'dashboard-1',
+      report: validReport({
+        dataSource: 'metrics',
+        metricQuery: METRIC_QUERY,
+      }),
+    });
+
+    expect(mockDb.report.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        dataSource: 'metrics',
+        metricQuery: expect.objectContaining({
+          metric: 'http_request_duration_seconds',
+          aggregation: 'p95',
+        }),
+      }),
+    });
+  });
+
+  // Both halves of the pairing rule are rejected by the SCHEMA, so like the
+  // other schema-level cases in this file they throw out of `invoke` before a
+  // handler runs, rather than coming back as a tool error.
+  it('rejects a metrics report with no metricQuery', async () => {
+    const server = register();
+
+    await expect(
+      server.invoke('create_report', {
+        projectId: 'project-1',
+        dashboardId: 'dashboard-1',
+        report: validReport({ dataSource: 'metrics' }),
+      }),
+    ).rejects.toThrow('A metrics report needs a metricQuery');
+
+    expect(mockDb.report.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a metricQuery on an events report', async () => {
+    const server = register();
+
+    await expect(
+      server.invoke('create_report', {
+        projectId: 'project-1',
+        dashboardId: 'dashboard-1',
+        report: validReport({
+          dataSource: 'events',
+          metricQuery: METRIC_QUERY,
+        }),
+      }),
+    ).rejects.toThrow('A metricQuery is only meaningful');
+
+    expect(mockDb.report.create).not.toHaveBeenCalled();
+  });
+
+  it('duplicates a metric report as a metric report', async () => {
+    mockDb.report.findFirst.mockResolvedValue(METRIC_REPORT);
+    const server = register();
+
+    await server.invoke('duplicate_report', {
+      projectId: 'project-1',
+      reportId: '11111111-1111-4111-8111-111111111111',
+    });
+
+    expect(mockDb.report.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        dataSource: 'metrics',
+        metricQuery: METRIC_QUERY,
+      }),
+    });
+  });
+
+  it('round trips a metric report from get_dashboard back through update_report', async () => {
+    // The read side entered the same way: a metric row rendered back WITHOUT
+    // these two fields reads as an events report, and handing that config
+    // straight to update_report stores it as one.
+    mockDb.report.findMany.mockResolvedValue([METRIC_REPORT]);
+    const readServer = register(READ_CONTEXT);
+    const dashboard = await readServer.invoke('get_dashboard', {
+      dashboardId: 'dashboard-1',
+    });
+    const configuration = dashboard.reports[0].report;
+
+    expect(configuration.dataSource).toBe('metrics');
+    expect(configuration.metricQuery).toEqual(METRIC_QUERY);
+
+    const rootServer = register();
+    await rootServer.invoke('update_report', {
+      projectId: 'project-1',
+      reportId: '11111111-1111-4111-8111-111111111111',
+      report: configuration,
+    });
+
+    expect(mockDb.report.update).toHaveBeenCalledWith({
+      where: { id: '11111111-1111-4111-8111-111111111111' },
+      data: expect.objectContaining({
+        dataSource: 'metrics',
+        metricQuery: expect.objectContaining({ aggregation: 'p95' }),
       }),
     });
   });

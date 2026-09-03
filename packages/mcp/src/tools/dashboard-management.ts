@@ -4,8 +4,9 @@ import {
   getDashboardById,
   getId,
   getProjectById,
+  reportWriteData,
 } from '@openpanel/db';
-import { zReport } from '@openpanel/validation';
+import { refineReportDataSource, zReport } from '@openpanel/validation';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { McpAuthContext } from '../auth';
@@ -15,6 +16,14 @@ import { projectIdSchema, resolveProjectId, withErrorHandling } from './shared';
 const reportSchema = zReport
   .omit({ projectId: true, limit: true, offset: true })
   .strict()
+  // Same pairing rule the trpc report routes and the agent's save_report
+  // enforce: `metrics` with no query, or a query on an events report, both
+  // save a panel that renders empty and reports nothing. Chained after
+  // `.omit()`/`.strict()` because zod throws ".omit() cannot be used on object
+  // schemas containing refinements" the other way round — which is also why
+  // the rule lives in @openpanel/validation as a bare refiner rather than on
+  // `zReport` itself.
+  .superRefine(refineReportDataSource)
   .superRefine((report, ctx) => {
     if (report.range !== 'custom') {
       return;
@@ -127,27 +136,6 @@ function reportUrl(organizationId: string, projectId: string, reportId: string) 
   return `${dashboardBaseUrl()}/${organizationId}/${projectId}/reports/${reportId}`;
 }
 
-function reportData(report: z.infer<typeof reportSchema>) {
-  return {
-    name: report.name,
-    events: report.series,
-    globalFilters: report.globalFilters ?? [],
-    interval: report.interval,
-    breakdowns: report.breakdowns,
-    chartType: report.chartType,
-    lineType: report.lineType,
-    range: report.range,
-    formula: report.formula ?? null,
-    previous: report.previous ?? false,
-    unit: report.unit ?? null,
-    metric: report.metric,
-    options: report.options ?? Prisma.DbNull,
-    visibleSeries: report.visibleSeries ?? [],
-    startDate: report.range === 'custom' ? report.startDate : null,
-    endDate: report.range === 'custom' ? report.endDate : null,
-  };
-}
-
 async function requireDashboard(projectId: string, dashboardId: string) {
   const dashboard = await getDashboardById(dashboardId, projectId);
   if (!dashboard) {
@@ -203,8 +191,19 @@ function withReportUrl(
   };
 }
 
+/**
+ * A stored row rendered back as the config shape `create_report`/`update_report`
+ * accept, so a client can read a report here and hand it straight back.
+ *
+ * `dataSource`/`metricQuery` are part of that round trip, not decoration: a
+ * metric report read back without them looks like an events report, and
+ * writing it back would store it as one — the same silent downgrade
+ * `reportWriteData` exists to stop, just entered from the read side.
+ */
 function canonicalReportConfig(report: {
   name: string;
+  dataSource: string;
+  metricQuery: unknown;
   events: unknown;
   globalFilters: unknown;
   interval: string;
@@ -223,6 +222,8 @@ function canonicalReportConfig(report: {
 }) {
   return {
     name: report.name,
+    dataSource: report.dataSource,
+    metricQuery: report.metricQuery ?? undefined,
     series: report.events,
     globalFilters: report.globalFilters,
     interval: report.interval,
@@ -421,7 +422,12 @@ export function registerDashboardManagementTools(
           data: {
             projectId: dashboard.projectId,
             dashboardId,
-            ...reportData(report),
+            // Shared with the trpc routes and the agent's save_report. This
+            // used to be a local copy of the column list and it drifted:
+            // `dataSource`/`metricQuery` went unwritten, so a metric report
+            // saved over MCP was stored as an events report with an empty
+            // series — a panel that renders nothing and reports no error.
+            ...reportWriteData(report),
           },
         });
 
@@ -445,7 +451,7 @@ export function registerDashboardManagementTools(
         await requireReport(projectId, reportId);
         const updated = await db.report.update({
           where: { id: reportId },
-          data: reportData(report),
+          data: reportWriteData(report),
         });
 
         return {
@@ -485,11 +491,21 @@ export function registerDashboardManagementTools(
       withErrorHandling(async () => {
         const projectId = await resolveProjectId(context, inputProjectId);
         const report = await requireReport(projectId, reportId);
+        // Copies columns off a stored row rather than going through
+        // `reportWriteData`, which takes a validated config (`series`, not the
+        // `events` column). That makes this the one list here that still has
+        // to be kept in step with the Report model by hand — a new column is
+        // silently not duplicated until it is added below.
         const duplicate = await db.report.create({
           data: {
             projectId: report.projectId,
             dashboardId: report.dashboardId,
             name: `Copy of ${report.name}`,
+            dataSource: report.dataSource,
+            // The row holds `null` for a report with no query, and Prisma
+            // will not take a bare `null` for a Json column — it reserves
+            // that for a JSON null literal and wants `DbNull` for a SQL NULL.
+            metricQuery: report.metricQuery ?? Prisma.DbNull,
             events: report.events!,
             globalFilters: report.globalFilters ?? [],
             interval: report.interval,

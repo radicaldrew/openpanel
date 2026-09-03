@@ -298,7 +298,10 @@ export async function runReport(input: {
   if (report.chartType === 'funnel') {
     return { ...meta, data: await funnelService.getFunnel(chartInput) };
   }
-  if (report.chartType === 'metric') {
+  // See getReportDataCore: only ChartEngine branches on `dataSource`, so a
+  // saved metric CARD backed by metrics has to skip the aggregate engine or it
+  // reads back as an empty chart with no error.
+  if (report.chartType === 'metric' && report.dataSource !== 'metrics') {
     return { ...meta, data: await AggregateChartEngine.execute(chartInput) };
   }
   return { ...meta, data: await ChartEngine.execute(chartInput) };
@@ -345,7 +348,10 @@ export async function runReportFromConfig(input: {
   if (input.config.chartType === 'funnel') {
     return { ...meta, data: await funnelService.getFunnel(chartInput as Parameters<typeof funnelService.getFunnel>[0]) };
   }
-  if (input.config.chartType === 'metric') {
+  if (
+    input.config.chartType === 'metric' &&
+    input.config.dataSource !== 'metrics'
+  ) {
     return { ...meta, data: await AggregateChartEngine.execute(chartInput) };
   }
   return { ...meta, data: await ChartEngine.execute(chartInput) };
