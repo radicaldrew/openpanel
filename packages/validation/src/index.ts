@@ -140,10 +140,72 @@ export const zChartEventWithType = zChartEvent.extend({
   type: z.literal('event'),
 });
 
-export const zChartEventItem = z.discriminatedUnion('type', [
-  zChartEventWithType,
-  zChartFormula,
-]);
+/**
+ * An LLM writing a report — `generate_report` in the chat agent, `create_report`
+ * over MCP — routinely omits `type` on an event series. The field carries no
+ * information from where the model sits: only a formula has to announce itself,
+ * so an event series looks complete without it. The discriminated union then
+ * rejects the whole call with `No matching discriminator`, which the agent loop
+ * cannot repair (nothing it changes about the series makes the issue go away)
+ * and the user sees as a silent, repeating "An error occurred".
+ *
+ * WHY A PREPROCESS AND NOT A DEFAULT ON THE LITERAL
+ *
+ * `z.discriminatedUnion` reads the discriminator off the RAW input, before any
+ * field-level default runs, so `z.literal('event').default('event')` parses a
+ * type-less item exactly as badly as an undefaulted one (verified on zod
+ * 4.3.6). Demoting the union to a plain `z.union` would honour the default, but
+ * it also replaces the one "type is wrong" issue with both branches' errors —
+ * a malformed event would come back to the model as a wall of formula
+ * complaints, which is the opposite of what its self-correction loop needs.
+ *
+ * The tool definition the model sees is unaffected: zod 4's pipe processor
+ * falls through a `transform` input to the output schema in both io modes, so
+ * the generated JSON Schema is still the same two-branch `oneOf` with
+ * `const: "event"` / `const: "formula"`. The test pins that.
+ *
+ * The one real cost: `z.input<>` of anything containing a series collapses to
+ * `unknown`. tRPC types a procedure's client-side input from `z.input`, so
+ * `report.create` / `chart.*` callers lose compile-time checking of `series`.
+ * The output type (`IChartEventItem`) is unchanged and still narrows on `.type`.
+ */
+/**
+ * Fill in a series item's missing `type` discriminator.
+ *
+ * Exported because the agent's `generate_report` tool declares its OWN inline
+ * series schema — its `.describe()` strings are prompt text written for that
+ * tool, so it cannot just reuse `zChartEventItem` — and it needs the identical
+ * preprocess in front of its identical discriminated union. Two hand-written
+ * copies of this predicate would drift, and a drift here is invisible: the
+ * schema still parses, the model just starts getting "No matching
+ * discriminator" back on one path and not the other.
+ *
+ * Anything that is not a plain object, or that already states a `type`, is
+ * passed through untouched for the union itself to reject or accept.
+ */
+export const stampSeriesDiscriminator = (value: unknown): unknown => {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    'type' in value
+  ) {
+    return value;
+  }
+
+  // Branch on `formula` rather than blindly stamping `'event'`: a type-less
+  // formula would otherwise be routed to the event branch and rejected with
+  // a misleading "name is required".
+  return {
+    ...value,
+    type: 'formula' in value ? 'formula' : 'event',
+  };
+};
+
+export const zChartEventItem = z.preprocess(
+  stampSeriesDiscriminator,
+  z.discriminatedUnion('type', [zChartEventWithType, zChartFormula]),
+);
 
 export const zChartBreakdown = z.object({
   id: z.string().optional(),
@@ -289,6 +351,40 @@ export type ISavedTelemetryQuery = z.infer<typeof zSavedTelemetryQuery>;
 export const zReportDataSource = z.enum(['events', 'metrics']);
 export type IReportDataSource = z.infer<typeof zReportDataSource>;
 
+/**
+ * The chart types a metrics report can actually draw.
+ *
+ * `executeChart` is the only entry point that branches on
+ * `dataSource === 'metrics'`, so a metric report is only ever rendered by
+ * something that routes through it:
+ *
+ *  - `linear` / `area` / `histogram` / `metric` reach it (the dashboard sends
+ *    all four to `chart.chart`), so they draw;
+ *  - `bar` / `pie` go to `chart.aggregate` → `executeAggregateChart`, which has
+ *    no metrics branch and runs the events pipeline over an empty series;
+ *  - `funnel` / `retention` / `conversion` / `sankey` each have their own
+ *    events-only service, and `map` needs country breakdowns no PromQL label
+ *    produces.
+ *
+ * Every one of those failures is silent — an empty panel, never an error — so
+ * the list is shared rather than restated per caller. It lives here beside
+ * `refineReportDataSource` because it is the same class of rule: what a
+ * `metrics` report is allowed to say about itself.
+ */
+export const METRIC_CHART_TYPES = [
+  'linear',
+  'area',
+  'histogram',
+  'metric',
+] as const satisfies readonly z.infer<typeof zChartType>[];
+
+export type IMetricChartType = (typeof METRIC_CHART_TYPES)[number];
+
+export const isMetricChartType = (
+  chartType: z.infer<typeof zChartType>,
+): chartType is IMetricChartType =>
+  (METRIC_CHART_TYPES as readonly string[]).includes(chartType);
+
 // Base input schema - for API calls, engine, chart queries
 export const zReportInput = z.object({
   projectId: z.string().describe('The ID of the project this chart belongs to'),
@@ -386,9 +482,11 @@ export const zReportInput = z.object({
  * A report's data source and its metric query have to agree.
  *
  * Enforced as a standalone refinement rather than on `zReport` itself because
- * refining a schema turns it into a ZodEffects, and the report routes call
- * `.omit({ projectId: true })` on it — which only a ZodObject has. Callers
- * apply this after their own `.omit`/`.extend`.
+ * the report routes call `.omit({ projectId: true })` on it, and `.omit()`
+ * throws on any object schema that carries a refinement ("`.omit()` cannot be
+ * used on object schemas containing refinements"). Under zod 4 `.superRefine()`
+ * does return a ZodObject, so the method is there — it just refuses to run.
+ * Callers apply this after their own `.omit`/`.extend`.
  *
  * WHY IT IS WORTH ENFORCING
  *

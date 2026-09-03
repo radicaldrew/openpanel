@@ -31,6 +31,11 @@ export const pageContextPageSchema = z.enum([
   'events',
   'groupDetail',
   'dashboard',
+  // The metrics explorer. It carries no ids, and its range/interval live in
+  // local React state rather than the URL — so `useMetricsPageContext` passes
+  // them through `filters` explicitly, which is the only way the model learns
+  // the window the user is actually looking at. See `composeChatTools`.
+  'metrics',
 ]);
 
 export const pageContextSchema = z.object({
@@ -308,4 +313,39 @@ export type ChatClientToolHandlers = {
   apply_filters: (input: unknown) => unknown | Promise<unknown>;
   set_property_filters: (input: unknown) => unknown | Promise<unknown>;
   set_event_names_filter: (input: unknown) => unknown | Promise<unknown>;
+  save_report: (input: unknown) => unknown | Promise<unknown>;
+  create_dashboard: (input: unknown) => unknown | Promise<unknown>;
+};
+
+// ────────────────────────────────────────────────────────────────────
+// Write-intent tools — save_report / create_dashboard
+//
+// These two are `.client()` tools like the three above, but their Zod
+// schema deliberately does NOT live here. `save_report` validates its
+// payload against the canonical `zReport` (see the block comment in
+// apps/api/src/agents/tools/persist.ts, which explains why there is one
+// report contract rather than two), and `zReport` is defined in this
+// package's `index.ts` — which ends with `export * from './chat'`. Importing
+// it here closes that cycle: chat.ts is evaluated BEFORE index.ts's own body,
+// so the import resolves into the temporal dead zone and the whole package
+// throws on load with "Cannot access 'zReport' before initialization"
+// (reproduced, not assumed). The server owns the schema; the client handler
+// only needs the shape it receives, which is what these types describe.
+// ────────────────────────────────────────────────────────────────────
+
+export type SaveReportInput = {
+  /** Report name to prefill the dialog with. */
+  name: string;
+  /**
+   * The report config `generate_report` echoed back. Validated server-side
+   * against `zReport` before the call is dispatched, and again by trpc
+   * `report.create` when the user submits the dialog — so it is typed loosely
+   * here rather than restated a third time.
+   */
+  report: Record<string, unknown>;
+};
+
+export type CreateDashboardInput = {
+  /** The dashboard name the model suggests. The dialog cannot be prefilled. */
+  name: string;
 };

@@ -4,6 +4,8 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
+    "test": "vitest",
+    "test:run": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
