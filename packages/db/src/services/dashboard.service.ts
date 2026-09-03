@@ -1,5 +1,7 @@
 import type { Dashboard, Prisma } from '../prisma-client';
 import { db } from '../prisma-client';
+import { getId } from './id.service';
+import { getProjectById } from './project.service';
 
 export type IServiceDashboard = Dashboard;
 export type IServiceDashboards = Prisma.DashboardGetPayload<{
@@ -49,3 +51,4 @@ export async function listDashboardsCore(input: {
     select: { id: true, name: true, projectId: true },
   });
 }
+

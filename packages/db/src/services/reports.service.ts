@@ -10,7 +10,7 @@ import type {
 } from '@openpanel/validation';
 
 import type { Report as DbReport, ReportLayout } from '../prisma-client';
-import { db } from '../prisma-client';
+import { Prisma, db } from '../prisma-client';
 
 export type IServiceReport = Awaited<ReturnType<typeof getReportById>>;
 
@@ -216,7 +216,13 @@ export async function getReportDataCore(input: {
     return { ...meta, data: result };
   }
 
-  if (report.chartType === 'metric') {
+  // `dataSource` first, chartType second: only `ChartEngine.execute` branches on
+  // a metrics report, so sending a saved metric card to the aggregate engine
+  // runs the events pipeline over an empty series and returns an empty chart
+  // with no error. The dashboard never hits this path (it renders a metric card
+  // through `chart.chart`), so the disagreement only showed up on the read
+  // side — /v1, MCP and the agent's `get_report_data`.
+  if (report.chartType === 'metric' && report.dataSource !== 'metrics') {
     const result = await AggregateChartEngine.execute(chartInput);
     return { ...meta, data: result };
   }
@@ -224,3 +230,50 @@ export async function getReportDataCore(input: {
   const result = await ChartEngine.execute(chartInput);
   return { ...meta, data: result };
 }
+
+/** A report config as it arrives from a caller: everything but the project. */
+export type IReportWriteInput = Omit<IReport, 'projectId'>;
+
+/**
+ * The report column list, in one place.
+ *
+ * There were three hand-maintained copies of this (report.create,
+ * report.update, and the MCP server's `reportData`) and they drifted: two of
+ * them stopped writing `dataSource`/`metricQuery`, which stores a metric panel
+ * as an events report with an empty series — a chart that renders nothing and
+ * reports no error. New writers should call this rather than add a fourth copy.
+ *
+ * Two spellings matter:
+ *  - the column is `events`, the schema field is `series`;
+ *  - a Json column takes `Prisma.DbNull`, never `undefined`. For a Json column
+ *    `undefined` means "leave alone", which on an update would strand a
+ *    `metricQuery` on a report the user just converted back to events.
+ */
+export function reportWriteData(report: IReportWriteInput) {
+  return {
+    name: report.name,
+    dataSource: report.dataSource ?? 'events',
+    metricQuery: report.metricQuery ?? Prisma.DbNull,
+    events: report.series,
+    globalFilters: report.globalFilters ?? [],
+    interval: report.interval,
+    breakdowns: report.breakdowns,
+    chartType: report.chartType,
+    lineType: report.lineType,
+    range: report.range,
+    formula: report.formula ?? null,
+    previous: report.previous ?? false,
+    unit: report.unit ?? null,
+    metric: report.metric,
+    options: report.options ?? Prisma.DbNull,
+    visibleSeries: report.visibleSeries ?? [],
+    // Custom dates are only meaningful on a custom range; keeping them on a
+    // preset would make a saved report read one way and run another.
+    startDate: report.range === 'custom' ? report.startDate : null,
+    endDate: report.range === 'custom' ? report.endDate : null,
+  } satisfies Omit<
+    Prisma.ReportUncheckedCreateInput,
+    'projectId' | 'dashboardId'
+  >;
+}
+
