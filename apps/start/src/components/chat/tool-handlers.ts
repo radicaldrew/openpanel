@@ -172,6 +172,11 @@ function saveReport(input: SaveReportInput): {
     // it would bury the answer. The modal's success toast still offers
     // "View report".
     disableRedirect: true,
+    // Makes the dialog show what it is about to write. Without it the only
+    // human gate on an AI-initiated write is a name field and a dashboard
+    // picker, which cannot tell the user whether the payload matches the chart
+    // they just looked at.
+    proposedBy: 'agent',
   });
 
   return { dialog_opened: true, name: input.name };
