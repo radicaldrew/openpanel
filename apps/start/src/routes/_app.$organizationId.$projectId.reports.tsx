@@ -1,4 +1,5 @@
 import ReportEditor from '@/components/report-chart/report-editor';
+import { useReportDraftPageContext } from '@/hooks/use-page-context-helpers';
 import { PAGE_TITLES, createProjectTitle } from '@/utils/title';
 import { createFileRoute } from '@tanstack/react-router';
 import { z } from 'zod';
@@ -22,5 +23,6 @@ export const Route = createFileRoute(
 });
 
 function Component() {
+  useReportDraftPageContext();
   return <ReportEditor report={null} />;
 }

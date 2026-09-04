@@ -1,4 +1,5 @@
 import { useOverviewOptions } from '@/components/overview/useOverviewOptions';
+import { useSelector } from '@/redux';
 import {
   type PageContext,
   type PageContextPage,
@@ -153,6 +154,26 @@ export function useDashboardListPageContext() {
  * For the Report Editor page. Sends the full live report draft so the
  * model can propose concrete edits via `preview_report_with_changes`.
  */
+/**
+ * The NEW-report editor, which has no saved report to load.
+ *
+ * Its draft exists only in the redux slice, so without this the one page that
+ * is nothing but a live report draft registered no context at all —
+ * `composeChatTools` fell through to `default:` and the model never got
+ * REPORT_EDITOR_TOOLS (`preview_report_with_changes`, `suggest_breakdowns`,
+ * `explain_filter_impact`) on the page where they are most useful.
+ *
+ * Held back until `ready`, because before the editor mounts the slice is
+ * `initialState` — an empty draft the model would read as a real one.
+ */
+export function useReportDraftPageContext() {
+  const draft = useSelector((state) => state.report);
+
+  useReportEditorContext(
+    draft.ready ? (draft as unknown as IReportInput) : null,
+  );
+}
+
 export function useReportEditorContext(reportDraft: IReportInput | null) {
   const { projectId, organizationId } = useAppParams();
 
