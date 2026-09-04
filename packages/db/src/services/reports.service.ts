@@ -241,7 +241,14 @@ export type IReportWriteInput = Omit<IReport, 'projectId'>;
  * report.update, and the MCP server's `reportData`) and they drifted: two of
  * them stopped writing `dataSource`/`metricQuery`, which stores a metric panel
  * as an events report with an empty series — a chart that renders nothing and
- * reports no error. New writers should call this rather than add a fourth copy.
+ * reports no error. All three now call this; a new writer should too rather
+ * than start a fourth.
+ *
+ * It replaces every column it names, which is what its callers mean: the
+ * editor posts a whole report, so a key it leaves out is one the user removed.
+ * Coercing to null/DbNull rather than passing `undefined` through is what makes
+ * that true — `undefined` reads to Prisma as "leave alone", which is how
+ * clearing a formula used to silently not persist.
  *
  * Two spellings matter:
  *  - the column is `events`, the schema field is `series`;

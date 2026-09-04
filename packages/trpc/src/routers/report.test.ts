@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Prisma } from '@openpanel/db';
 
 // vi.mock is hoisted above the module scope, so the spies have to be too.
 const {
@@ -15,7 +16,12 @@ const {
   requireProjectAccess: vi.fn(),
 }));
 
-vi.mock('@openpanel/db', () => ({
+// Partial mock: the real `reportWriteData` and the real `Prisma` load, only
+// the db handles are stubbed. Hand-stubbing `reportWriteData` would recreate
+// the very column-list copy the helper exists to delete — the drift it was
+// written to end started exactly that way.
+vi.mock('@openpanel/db', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@openpanel/db')>()),
   db: {
     report: {
       create: reportCreate,
@@ -24,9 +30,6 @@ vi.mock('@openpanel/db', () => ({
     },
     dashboard: { findUniqueOrThrow: dashboardFindUniqueOrThrow },
   },
-  // The real value is an object-enum sentinel; identity is all the assertions
-  // below need, and it keeps the generated client out of a unit test.
-  Prisma: { DbNull: Symbol.for('Prisma.DbNull') },
   getDashboardById: vi.fn(),
   getReportById: vi.fn(),
   getReportsByDashboardId: vi.fn(),
@@ -47,7 +50,7 @@ vi.mock('../access', () => ({
 
 import { reportRouter } from './report';
 
-const DB_NULL = Symbol.for('Prisma.DbNull');
+const DB_NULL = Prisma.DbNull;
 
 const caller = () =>
   reportRouter.createCaller({
@@ -150,6 +153,46 @@ describe('a metric report survives being saved', () => {
  * Neither half is meaningful alone and neither failure announces itself, so
  * both are rejected at the edge rather than stored and puzzled over later.
  */
+describe('update replaces the report rather than patching it', () => {
+  it('persists a cleared formula, unit and options', async () => {
+    // The editor posts the whole slice, so an absent key means the user
+    // REMOVED it. Passing `undefined` straight to Prisma made it mean "leave
+    // alone", so clearing a formula in the UI silently did nothing.
+    await caller().update({
+      reportId: 'rep_1',
+      report: {
+        ...baseReport,
+        formula: undefined,
+        unit: undefined,
+        options: undefined,
+      },
+    });
+
+    expect(reportUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          formula: null,
+          unit: null,
+          options: DB_NULL,
+        }),
+      }),
+    );
+  });
+
+  it('still writes a formula that is present', async () => {
+    await caller().update({
+      reportId: 'rep_1',
+      report: { ...baseReport, formula: 'A / B' },
+    });
+
+    expect(reportUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ formula: 'A / B' }),
+      }),
+    );
+  });
+});
+
 describe('the data source and the query have to agree', () => {
   it('refuses a metrics report with no query', async () => {
     await expect(
@@ -171,6 +214,30 @@ describe('the data source and the query have to agree', () => {
     ).rejects.toThrow(/dataSource/i);
 
     expect(reportCreate).not.toHaveBeenCalled();
+  });
+
+  it('refuses a chart type the metrics engine cannot draw', async () => {
+    // bar/pie route to the aggregate engine, which has no metrics branch: the
+    // row would save happily and the panel would render blank forever.
+    await expect(
+      caller().create({
+        report: { ...metricReport, chartType: 'pie' as const },
+        dashboardId: 'dash_1',
+      }),
+    ).rejects.toThrow(/chartType/i);
+
+    expect(reportCreate).not.toHaveBeenCalled();
+  });
+
+  it('allows a chart type the metrics engine can draw', async () => {
+    await expect(
+      caller().create({
+        report: { ...metricReport, chartType: 'area' as const },
+        dashboardId: 'dash_1',
+      }),
+    ).resolves.toBeDefined();
+
+    expect(reportCreate).toHaveBeenCalled();
   });
 
   it('applies the same rule to update', async () => {

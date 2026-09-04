@@ -6,8 +6,13 @@ import {
   getDashboardById,
   getReportById,
   getReportsByDashboardId,
+  reportWriteData,
 } from '@openpanel/db';
-import { refineReportDataSource, zReport } from '@openpanel/validation';
+import {
+  refineMetricChartType,
+  refineReportDataSource,
+  zReport,
+} from '@openpanel/validation';
 
 import { getProjectAccess, requireProjectAccess } from '../access';
 import {
@@ -37,7 +42,8 @@ export const reportRouter = createTRPCRouter({
       z.object({
         report: zReport
           .omit({ projectId: true })
-          .superRefine(refineReportDataSource),
+          .superRefine(refineReportDataSource)
+          .superRefine(refineMetricChartType),
         dashboardId: z.string(),
       }),
     )
@@ -58,29 +64,7 @@ export const reportRouter = createTRPCRouter({
         data: {
           projectId: dashboard.projectId,
           dashboardId,
-          name: report.name,
-          // Without these two a metric report is stored as an events report
-          // with an empty series — a panel that renders nothing and reports no
-          // error. `Prisma.DbNull` rather than `undefined`: for a Json column
-          // undefined means "leave alone", which on update would strand a query
-          // on a report that is no longer a metric one.
-          dataSource: report.dataSource ?? 'events',
-          metricQuery: report.metricQuery ?? Prisma.DbNull,
-          events: report.series,
-          globalFilters: report.globalFilters ?? [],
-          interval: report.interval,
-          breakdowns: report.breakdowns,
-          chartType: report.chartType,
-          lineType: report.lineType,
-          range: report.range,
-          formula: report.formula,
-          previous: report.previous ?? false,
-          unit: report.unit,
-          metric: report.metric,
-          options: report.options,
-          visibleSeries: report.visibleSeries ?? [],
-          startDate: report.range === 'custom' ? report.startDate : null,
-          endDate: report.range === 'custom' ? report.endDate : null,
+          ...reportWriteData(report),
         },
       });
     }),
@@ -90,7 +74,8 @@ export const reportRouter = createTRPCRouter({
         reportId: z.string(),
         report: zReport
           .omit({ projectId: true })
-          .superRefine(refineReportDataSource),
+          .superRefine(refineReportDataSource)
+          .superRefine(refineMetricChartType),
       }),
     )
     .mutation(async ({ input: { report, reportId }, ctx }) => {
@@ -110,28 +95,13 @@ export const reportRouter = createTRPCRouter({
         where: {
           id: reportId,
         },
-        data: {
-          name: report.name,
-          // Carried on update too: editing a metric panel and saving it must
-          // not quietly turn it back into an events report.
-          dataSource: report.dataSource ?? 'events',
-          metricQuery: report.metricQuery ?? Prisma.DbNull,
-          events: report.series,
-          globalFilters: report.globalFilters ?? [],
-          interval: report.interval,
-          breakdowns: report.breakdowns,
-          chartType: report.chartType,
-          lineType: report.lineType,
-          range: report.range,
-          formula: report.formula,
-          previous: report.previous ?? false,
-          unit: report.unit,
-          metric: report.metric,
-          options: report.options,
-          visibleSeries: report.visibleSeries ?? [],
-          startDate: report.range === 'custom' ? report.startDate : null,
-          endDate: report.range === 'custom' ? report.endDate : null,
-        },
+        // The editor always sends a whole report — `ReportSaveButton` posts the
+        // entire slice — so this is a replace, not a patch. That distinction is
+        // load-bearing: passing `formula`/`unit`/`options` through as
+        // possibly-`undefined` made Prisma read them as "leave alone", so
+        // CLEARING a formula in the editor did not persist. `reportWriteData`
+        // coerces them to null/DbNull, which is what replace semantics mean.
+        data: reportWriteData(report),
       });
     }),
   move: protectedProcedure
