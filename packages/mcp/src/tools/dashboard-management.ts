@@ -6,7 +6,11 @@ import {
   getProjectById,
   reportWriteData,
 } from '@openpanel/db';
-import { refineReportDataSource, zReport } from '@openpanel/validation';
+import {
+  refineMetricChartType,
+  refineReportDataSource,
+  zReport,
+} from '@openpanel/validation';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { McpAuthContext } from '../auth';
@@ -24,6 +28,7 @@ const reportSchema = zReport
   // the rule lives in @openpanel/validation as a bare refiner rather than on
   // `zReport` itself.
   .superRefine(refineReportDataSource)
+  .superRefine(refineMetricChartType)
   .superRefine((report, ctx) => {
     if (report.range !== 'custom') {
       return;

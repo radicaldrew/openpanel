@@ -249,6 +249,31 @@ describe('dashboard management registration', () => {
     ).toBe(false);
   });
 
+  it('refuses a metrics report with a chart type that cannot draw it', () => {
+    const reportSchema = register().schema('create_report').report;
+    const metricQuery = {
+      metric: 'http_requests_total',
+      matchers: [],
+      fn: 'rate' as const,
+      aggregation: 'sum' as const,
+      groupBy: [],
+    };
+
+    // Only linear/area/histogram/metric reach the metrics engine; the rest
+    // silently persist a panel that renders nothing.
+    expect(
+      reportSchema.safeParse(
+        validReport({ dataSource: 'metrics', metricQuery, chartType: 'pie' }),
+      ).success,
+    ).toBe(false);
+
+    expect(
+      reportSchema.safeParse(
+        validReport({ dataSource: 'metrics', metricQuery, chartType: 'area' }),
+      ).success,
+    ).toBe(true);
+  });
+
   it('requires valid ordered dates for custom ranges', () => {
     const reportSchema = register().schema('create_report').report;
 

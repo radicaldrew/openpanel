@@ -517,6 +517,39 @@ export const refineReportDataSource = (
   }
 };
 
+/**
+ * A metrics report must use a chart type the metrics engine can actually draw.
+ *
+ * Only `linear`/`area`/`histogram`/`metric` route through `executeChart`; the
+ * rest go to the aggregate or funnel engines, neither of which has a metrics
+ * branch, so they run the events pipeline over an empty series. Nothing
+ * errors — the panel just renders blank forever, which is the same silent
+ * class of failure as a dropped `metricQuery`.
+ *
+ * Pairs with {@link refineReportDataSource}: every write path that applies one
+ * should apply both, or the two model-facing surfaces disagree about what is
+ * saveable.
+ */
+export const refineMetricChartType = (
+  report: {
+    dataSource?: IReportDataSource;
+    chartType: z.infer<typeof zChartType>;
+  },
+  ctx: z.RefinementCtx,
+) => {
+  if (report.dataSource !== 'metrics') {
+    return;
+  }
+
+  if (!isMetricChartType(report.chartType)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['chartType'],
+      message: `chartType "${report.chartType}" cannot draw a metric series — it would save a panel that renders nothing. Use one of: ${METRIC_CHART_TYPES.join(', ')}`,
+    });
+  }
+};
+
 export const zReport = zReportInput.extend({
   name: z
     .string()

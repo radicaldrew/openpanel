@@ -3,6 +3,7 @@ import type { IChartType, IReportDataSource } from '@openpanel/validation';
 import {
   isMetricChartType,
   METRIC_CHART_TYPES,
+  refineMetricChartType,
   refineReportDataSource,
   zChartSeries,
   zReport,
@@ -93,31 +94,6 @@ const savedReportContract = zReport
   .superRefine(refineMetricChartType)
   .superRefine(refineEventSeriesPresent)
   .superRefine(refineCustomRangeDates);
-
-/**
- * A metric report has to be saved as a chart type the metrics engine is
- * actually reachable from. `generate_report` refuses the rest up front, but
- * this is the path that leaves something behind: only
- * `linear`/`area`/`histogram`/`metric` route through `executeChart`, and every
- * other type renders the saved panel empty with no error for the user to act
- * on. See METRIC_CHART_TYPES in @openpanel/validation.
- */
-function refineMetricChartType(
-  report: { dataSource?: IReportDataSource; chartType: IChartType },
-  ctx: z.RefinementCtx,
-) {
-  if (report.dataSource !== 'metrics') {
-    return;
-  }
-
-  if (!isMetricChartType(report.chartType)) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['chartType'],
-      message: `chartType "${report.chartType}" cannot draw a metric series — it would save a panel that renders nothing. Use one of: ${METRIC_CHART_TYPES.join(', ')}`,
-    });
-  }
-}
 
 /**
  * The counterpart of the `series.default([])` above, and the same rule
