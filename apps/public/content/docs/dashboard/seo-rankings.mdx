@@ -1,0 +1,42 @@
+---
+title: "Rank tracking"
+description: "The Rankings tab checks where your site ranks for the keywords you track, on desktop and mobile, on a daily or weekly schedule or on demand. It shows movement over 7 and 30 days, the ranking URL, SERP features, a history chart with your Search Console position overlaid, and share of voice against competitors."
+date: 2026-09-07
+---
+
+## Add keywords
+
+An empty Rankings tab offers two ways in:
+
+- **Add keywords** — paste one keyword per line (or comma-separated), optionally with tags.
+- **Import top queries from Search Console** — takes your best queries of the last 28 days that are not tracked yet. Needs Search Console connected.
+
+Keywords are also added from the [Keywords](/docs/dashboard/seo-keywords) tab and the **Track** action on the Search Console tab. Spelling is normalized (case and spacing), so *Running Shoes* and *running shoes* are one keyword. Volume and difficulty are fetched automatically when a keyword is added.
+
+## Checks and schedules
+
+A check runs every keyword on every configured device (**Settings → DataForSEO → Devices**). The **rank schedule** there decides when: daily, weekly, or only when you click **Check now**. One check per project runs at a time; *Check now* is disabled while one is in progress and the tab refreshes on its own until it finishes.
+
+Small on-demand checks (ten keywords or fewer) return within seconds. Larger ones are queued with DataForSEO and usually complete within a few minutes; the run card shows progress and the cost so far. If the monthly spend cap has been reached, a scheduled or manual check is recorded as failed with *spend cap reached* instead of running.
+
+## Reading the table
+
+| Column | Meaning |
+|---|---|
+| **Keyword** | With its tags. Paused keywords are marked and skipped by checks. |
+| **Volume** | Monthly search volume; hover for difficulty and CPC. |
+| **Desktop / Mobile** | Current position with a change chip. Green means the keyword moved up. Toggle the chip between the last **7d** and **30d**. A dash means not in the top N, where N is the project's SERP depth. |
+| **Ranking URL** | The page of yours that ranks. |
+| **SERP features** | What else Google shows for the query: *People also ask*, video, AI overview and so on. |
+
+The cards above the table summarize the whole list: average position, how many keywords sit in the top 3, 10 and 20, and a **visibility** score, which weights each keyword's position by its search volume and an average click-through curve, so 100 would mean every keyword at number one.
+
+Filter by tag or search, and use the checkboxes to **pause**, **resume**, **tag** or **remove** keywords in bulk. Removing a keyword keeps its history.
+
+## History
+
+Click a row to open the history sheet: your tracked position over the selected range as a solid line, with the **Search Console average position** for the same query as a dashed overlay. Switch device at the top of the sheet.
+
+## Competitors
+
+The **Competitors** view shows share of voice: for every tracked keyword, whoever appears in the top ten on each day's check gets credit weighted by position, and the chart splits that credit between your domain, each competitor from **Settings → DataForSEO**, and everyone else. Subdomains count toward their competitor.

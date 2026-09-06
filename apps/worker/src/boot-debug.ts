@@ -8,8 +8,8 @@ import {
 import type { Job } from 'bullmq';
 import type { Express, Request } from 'express';
 import { cronJob } from './jobs/cron';
-import { insightsProjectJob } from './jobs/insights';
 import { previewWeeklyDigestForProject } from './jobs/cron.weekly-digest';
+import { insightsProjectJob } from './jobs/insights';
 import { logger } from './utils/logger';
 
 const CRON_TYPES = [
@@ -33,6 +33,13 @@ const CRON_TYPES = [
   'dataHealth',
   'windDown',
   'metricAlerts',
+  'measureSignals',
+  'signalOutbox',
+  'seoRankScheduler',
+  'seoBacklinkScheduler',
+  'seoSpendReset',
+  'seoBalanceRefresh',
+  'seoMetricsRefresh',
 ] as const satisfies readonly CronQueueType[];
 
 function escapeHtml(value: string) {
@@ -120,8 +127,8 @@ export function bootDebugRoutes(app: Express) {
           .send(
             renderHtml(
               jobs,
-              `${type} ran. Result: ${JSON.stringify(result ?? null)}. Check the worker logs for details.`,
-            ),
+              `${type} ran. Result: ${JSON.stringify(result ?? null)}. Check the worker logs for details.`
+            )
           );
         return;
       }
@@ -157,7 +164,7 @@ export function bootDebugRoutes(app: Express) {
           'insightsProject',
           { type: 'insightsProject', payload: { projectId, date } },
           // Unique id so repeated test runs aren't deduped by BullMQ.
-          { jobId: `debug:${projectId}:${Date.now()}` },
+          { jobId: `debug:${projectId}:${Date.now()}` }
         );
         logger.info({ projectId, jobId: job.id }, 'Enqueued insights job');
         res.json({
@@ -175,7 +182,10 @@ export function bootDebugRoutes(app: Express) {
       return;
     }
 
-    logger.info({ projectId }, 'Manually running insights for project (inline)');
+    logger.info(
+      { projectId },
+      'Manually running insights for project (inline)'
+    );
 
     try {
       await insightsProjectJob({
@@ -254,7 +264,6 @@ export function bootDebugRoutes(app: Express) {
   logger.info('Debug cron endpoint enabled: /debug/cron/:type');
   logger.info('Debug insights endpoint enabled: /debug/insights/:projectId');
   logger.info(
-    'Debug weekly digest enabled: /debug/weekly-digest/:projectId?to=&force=1',
+    'Debug weekly digest enabled: /debug/weekly-digest/:projectId?to=&force=1'
   );
 }
-

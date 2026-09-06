@@ -27,6 +27,7 @@ import { registerDashboardLinkTools } from './dashboard-links';
 import { registerDashboardManagementTools } from './dashboard-management';
 import { registerTelemetryTools } from './observability/telemetry';
 import { registerProjectTools } from './projects';
+import { registerSeoTools } from './seo';
 
 export function registerAllTools(
   server: McpServer,
@@ -76,4 +77,8 @@ export function registerAllTools(
   registerGscPageTools(server, context);
   registerGscQueryTools(server, context);
   registerGscCannibalizationTools(server, context);
+
+  // SEO module (DataForSEO-backed): status, keywords, rank tracking,
+  // backlinks, site audits, AI visibility
+  registerSeoTools(server, context);
 }

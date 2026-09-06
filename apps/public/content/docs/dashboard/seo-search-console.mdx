@@ -1,0 +1,35 @@
+---
+title: "Search Console"
+description: "The Search Console tab shows how your site performs in Google search: clicks, impressions, click-through rate and average position, by page and by query. With DataForSEO connected, every query also gets its search volume and difficulty and a one-click way to track it."
+date: 2026-09-07
+---
+
+## Connect Search Console
+
+Open **Settings → Search Console**, sign in with the Google account that owns the property, and pick the site. OpenPanel syncs the last months of data once and then keeps a rolling three-day window up to date every night.
+
+Until a property is selected, the SEO tab shows a *No Search Console data yet* prompt with a button to the settings page.
+
+## What you see
+
+- **Clicks, impressions, average CTR, average position** for the selected range, each compared with the previous period of the same length.
+- **Search engines** and **AI engines** — where your search traffic comes from, using OpenPanel's own session data.
+- **Position over time** and a **CTR benchmark** that shows which pages get fewer clicks than their position would normally earn.
+- **Pages** and **Queries** tables, searchable and paginated. Click a page to open its details.
+
+The range picker at the top applies to the whole tab.
+
+## Additions with DataForSEO
+
+Once [DataForSEO is connected](/docs/dashboard/seo-dataforseo-settings), the Queries table gains two columns and an action:
+
+| Column | Meaning |
+|---|---|
+| **Volume** | Monthly search volume for the query in your project's location and language. |
+| **Difficulty** | DataForSEO's 0–100 keyword difficulty. |
+
+Queries you have not looked up before show as pending while OpenPanel fetches their metrics in the background; the table fills in on its own within a minute or so. Metrics are stored, so the same query costs nothing the next time.
+
+**Track** on a query adds it to the [Rankings](/docs/dashboard/seo-rankings) tab, where its position is checked on your schedule.
+
+<Callout>Only members who can edit the project trigger the metrics fetch, since it spends the organization's DataForSEO balance. Read-only members still see the columns once the data exists.</Callout>

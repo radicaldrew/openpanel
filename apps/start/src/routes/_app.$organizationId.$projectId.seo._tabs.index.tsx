@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { SearchIcon } from 'lucide-react';
+import { createFileRoute } from '@tanstack/react-router';
+import { PlusIcon, SearchIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import {
   CartesianGrid,
@@ -15,7 +15,6 @@ import {
   ChartTooltipItem,
   createChartTooltip,
 } from '@/components/charts/chart-tooltip';
-import { FullPageEmptyState } from '@/components/full-page-empty-state';
 import { OverviewInterval } from '@/components/overview/overview-interval';
 import { OverviewMetricCard } from '@/components/overview/overview-metric-card';
 import { OverviewRange } from '@/components/overview/overview-range';
@@ -25,30 +24,41 @@ import { GscCannibalization } from '@/components/page/gsc-cannibalization';
 import { GscCtrBenchmark } from '@/components/page/gsc-ctr-benchmark';
 import { GscPositionChart } from '@/components/page/gsc-position-chart';
 import { PagesInsights } from '@/components/page/pages-insights';
-import { PageContainer } from '@/components/page-container';
-import { PageHeader } from '@/components/page-header';
 import { Pagination } from '@/components/pagination';
 import {
   useYAxisProps,
   X_AXIS_STYLE_PROPS,
 } from '@/components/report-chart/common/axis';
 import { SerieIcon } from '@/components/report-chart/common/serie-icon';
+import {
+  difficultyClass,
+  formatVolume,
+  PendingCell,
+} from '@/components/seo/keywords/keyword-results-table';
+import { useTrackKeywords } from '@/components/seo/keywords/use-track-keywords';
+import { SeoGate } from '@/components/seo/seo-gate';
+import { useSeoStatus } from '@/components/seo/use-seo-status';
 import { Skeleton } from '@/components/skeleton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAppParams } from '@/hooks/use-app-params';
-import { useRangePageContext } from '@/hooks/use-page-context-helpers';
 import { useTRPC } from '@/integrations/trpc/react';
 import { pushModal } from '@/modals';
 import { getChartColor } from '@/utils/theme';
-import { createProjectTitle } from '@/utils/title';
 
-export const Route = createFileRoute('/_app/$organizationId/$projectId/seo')({
-  component: SeoPage,
-  head: () => ({
-    meta: [{ title: createProjectTitle('SEO') }],
-  }),
+export const Route = createFileRoute(
+  '/_app/$organizationId/$projectId/seo/_tabs/'
+)({
+  component: SeoTab,
 });
+
+function SeoTab() {
+  return (
+    <SeoGate requires={['gsc']}>
+      <SeoPage />
+    </SeoGate>
+  );
+}
 
 interface GscChartData {
   date: string;
@@ -86,10 +96,8 @@ const { TooltipProvider, Tooltip: GscTooltip } = createChartTooltip<
 });
 
 function SeoPage() {
-  const { projectId, organizationId } = useAppParams();
-  useRangePageContext('seo');
+  const { projectId } = useAppParams();
   const trpc = useTRPC();
-  const navigate = useNavigate();
   const { range, startDate, endDate, interval } = useOverviewOptions();
 
   const dateInput = {
@@ -142,6 +150,34 @@ function SeoPage() {
     )
   );
 
+  // Volume / Difficulty columns and the Track action need DataForSEO; they
+  // stay hidden until the organization has a key.
+  const seoStatusQuery = useSeoStatus(projectId);
+  const dfsConfigured = seoStatusQuery.data?.dfs.configured ?? false;
+  const enrichedQuery = useQuery(
+    trpc.seo.keywords.gscEnriched.queryOptions(
+      { projectId, range, startDate, endDate, limit: 500 },
+      {
+        enabled: !!isConnected && dfsConfigured,
+        // Pending rows resolve once the seoKeywordMetrics job lands.
+        refetchInterval: (query) =>
+          query.state.data?.rows.some((row) => row.pending) ? 15_000 : false,
+      }
+    )
+  );
+  const metricsByQuery = useMemo(() => {
+    const map = new Map<string, { searchVolume: number | null; difficulty: number | null; pending: boolean }>();
+    for (const row of enrichedQuery.data?.rows ?? []) {
+      map.set(row.query, {
+        searchVolume: row.searchVolume,
+        difficulty: row.difficulty,
+        pending: row.pending,
+      });
+    }
+    return map;
+  }, [enrichedQuery.data]);
+  const { track, isPending: isTracking } = useTrackKeywords(projectId);
+
   const [pagesPage, setPagesPage] = useState(0);
   const [queriesPage, setQueriesPage] = useState(0);
   const pageSize = 15;
@@ -189,37 +225,12 @@ function SeoPage() {
   const pagesPageCount = Math.ceil(filteredPages.length / pageSize) || 1;
   const queriesPageCount = Math.ceil(filteredQueries.length / pageSize) || 1;
 
-  if (connectionQuery.isLoading) {
+  if (connectionQuery.isLoading || !connection) {
     return (
-      <PageContainer>
-        <PageHeader description="Google Search Console data" title="SEO" />
-        <div className="mt-8 space-y-4">
-          <Skeleton className="h-64 w-full" />
-          <Skeleton className="h-96 w-full" />
-        </div>
-      </PageContainer>
-    );
-  }
-
-  if (!isConnected) {
-    return (
-      <FullPageEmptyState
-        className="pt-[20vh]"
-        description="Connect Google Search Console to track your search impressions, clicks, and keyword rankings."
-        icon={SearchIcon}
-        title="No SEO data yet"
-      >
-        <Button
-          onClick={() =>
-            navigate({
-              to: '/$organizationId/$projectId/settings/gsc',
-              params: { organizationId, projectId },
-            })
-          }
-        >
-          Connect Google Search Console
-        </Button>
-      </FullPageEmptyState>
+      <div className="space-y-4">
+        <Skeleton className="h-64 w-full" />
+        <Skeleton className="h-96 w-full" />
+      </div>
     );
   }
 
@@ -243,19 +254,19 @@ function SeoPage() {
   const pn = Math.max(prevOverview.length, 1);
 
   return (
-    <PageContainer>
-      <PageHeader
-        actions={
-          <>
-            <OverviewRange />
-            <OverviewInterval />
-          </>
-        }
-        description={`Search performance for ${connection.siteUrl}`}
-        title="SEO"
-      />
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <p className="text-muted-foreground text-sm">
+          Search performance for{' '}
+          <span className="font-mono">{connection.siteUrl}</span>
+        </p>
+        <div className="flex items-center gap-2">
+          <OverviewRange />
+          <OverviewInterval />
+        </div>
+      </div>
 
-      <div className="mt-8 space-y-8">
+      <div className="mt-6 space-y-8">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
           <div className="card col-span-1 grid grid-cols-2 overflow-hidden rounded-md lg:col-span-2">
             <OverviewMetricCard
@@ -361,6 +372,52 @@ function SeoPage() {
             totalCount={filteredPages.length}
           />
           <GscTable
+            extraColumns={
+              dfsConfigured
+                ? [
+                    {
+                      name: 'Volume',
+                      width: '70px',
+                      render: (item) => {
+                        const metric = metricsByQuery.get(String(item.query));
+                        if (!metric || metric.pending) {
+                          return enrichedQuery.isLoading || metric?.pending ? (
+                            <PendingCell />
+                          ) : (
+                            <span className="text-muted-foreground text-xs">–</span>
+                          );
+                        }
+                        return (
+                          <span className="font-mono font-semibold text-xs">
+                            {formatVolume(metric.searchVolume)}
+                          </span>
+                        );
+                      },
+                    },
+                    {
+                      name: 'KD',
+                      width: '50px',
+                      render: (item) => {
+                        const metric = metricsByQuery.get(String(item.query));
+                        if (!metric || metric.pending) {
+                          return enrichedQuery.isLoading || metric?.pending ? (
+                            <PendingCell />
+                          ) : (
+                            <span className="text-muted-foreground text-xs">–</span>
+                          );
+                        }
+                        return (
+                          <span
+                            className={`font-mono font-semibold text-xs ${difficultyClass(metric.difficulty)}`}
+                          >
+                            {metric.difficulty ?? '–'}
+                          </span>
+                        );
+                      },
+                    },
+                  ]
+                : undefined
+            }
             isLoading={queriesQuery.isLoading}
             keyField="query"
             keyLabel="Query"
@@ -379,6 +436,26 @@ function SeoPage() {
             pageCount={queriesPageCount}
             pageIndex={queriesPage}
             pageSize={pageSize}
+            rowAction={
+              dfsConfigured
+                ? {
+                    width: '40px',
+                    render: (item) => (
+                      <Button
+                        aria-label={`Track ${String(item.query)}`}
+                        className="h-6 w-6"
+                        disabled={isTracking}
+                        onClick={() => track([String(item.query)], 'gsc')}
+                        size="icon"
+                        title="Track this keyword"
+                        variant="ghost"
+                      >
+                        <PlusIcon className="h-3.5 w-3.5" />
+                      </Button>
+                    ),
+                  }
+                : undefined
+            }
             rows={paginatedQueries}
             searchPlaceholder="Search queries"
             searchValue={queriesSearch}
@@ -398,7 +475,7 @@ function SeoPage() {
           <PagesInsights projectId={projectId} />
         </div>
       </div>
-    </PageContainer>
+    </div>
   );
 }
 
@@ -637,9 +714,19 @@ function GscTable({
   pageCount,
   onPreviousPage,
   onNextPage,
+  extraColumns,
+  rowAction,
 }: {
   title: string;
   rows: GscTableRow[];
+  /** Optional trailing metric columns (Volume / KD on the queries table). */
+  extraColumns?: Array<{
+    name: string;
+    width: string;
+    render: (item: GscTableRow) => React.ReactNode;
+  }>;
+  /** Optional per-row action cell rendered last. */
+  rowAction?: { width: string; render: (item: GscTableRow) => React.ReactNode };
   keyField: string;
   keyLabel: string;
   maxClicks: number;
@@ -813,6 +900,10 @@ function GscTable({
               );
             },
           },
+          ...(extraColumns ?? []),
+          ...(rowAction
+            ? [{ name: '', width: rowAction.width, render: rowAction.render }]
+            : []),
         ]}
         data={rows}
         getColumnPercentage={(item) => item.clicks / maxClicks}

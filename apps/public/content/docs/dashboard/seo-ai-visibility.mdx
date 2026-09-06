@@ -1,0 +1,37 @@
+---
+title: "AI visibility"
+description: "The AI Visibility tab answers two questions side by side: how often AI assistants mention or cite your site in their answers, and how many visitors those assistants actually send you. A prompt explorer shows which domains get cited for any question you type."
+date: 2026-09-07
+---
+
+## Two halves
+
+**Visibility in AI answers** (left) comes from DataForSEO and needs a key and a project domain. It covers the two engines DataForSEO tracks: **ChatGPT** and **Google AI** (AI Overviews and AI Mode). ChatGPT data is only available for US English; Google AI follows your project's location and language.
+
+**Traffic from AI answers** (right) comes from your own OpenPanel data: sessions whose referrer is an AI assistant. It works without DataForSEO and covers more assistants, including Claude, Perplexity, Gemini, Copilot, You.com, Grok, Mistral and Kagi.
+
+If DataForSEO is not connected the left half and the prompt explorer stay hidden and the tab shows the traffic half alone.
+
+## Visibility in AI answers
+
+- **Engine cards** — how many AI answers mention your domain, per engine and in total, with the estimated monthly volume of the prompts behind them.
+- **Share of voice** — your mentions against each competitor from **Settings → DataForSEO**, as a share of the group's total. Without competitors your domain simply shows 100%.
+- **Top cited pages** — the pages on your site that AI answers link to most, with a per-engine breakdown.
+
+These lookups are cached for 24 hours.
+
+## Traffic from AI answers
+
+- The total number of sessions referred by AI assistants in the selected range, with the change against the previous period and a daily trend.
+- A table by assistant with sessions, the previous period's sessions and the change.
+
+Use the range picker to change the window; it applies to this half only, since the DataForSEO side reports current visibility rather than a date range.
+
+## Prompt explorer
+
+Type a question a customer might ask an assistant, choose engines, and click **Explore**. You get:
+
+- **Cited domains** — every site the answers cite, ranked by how many answers cite it. Your own domain is highlighted and configured competitors are marked.
+- **Answers** — the matching prompts with their estimated volume, engine and number of sources. Answers that cite your site are marked *cites you*.
+
+<Callout>Search Console has no data about AI assistants, so the traffic half is always based on OpenPanel sessions. Make sure the OpenPanel SDK runs on the pages you care about.</Callout>

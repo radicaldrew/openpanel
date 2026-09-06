@@ -17,6 +17,7 @@
     "@openpanel/db": "workspace:*",
     "@openpanel/gigapipe": "workspace:*",
     "@openpanel/logger": "workspace:*",
+    "@openpanel/queue": "workspace:*",
     "@openpanel/redis": "workspace:*",
     "@openpanel/validation": "workspace:*",
     "zod": "catalog:"

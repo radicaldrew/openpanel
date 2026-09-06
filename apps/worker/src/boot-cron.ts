@@ -1,6 +1,5 @@
-import type { CronQueueType } from '@openpanel/queue';
+import type { CronQueuePayload, CronQueueType } from '@openpanel/queue';
 import { cronQueue } from '@openpanel/queue';
-
 import { logger } from './utils/logger';
 
 async function removeConflictingJobs(schedulerKey: string) {
@@ -17,7 +16,7 @@ async function removeConflictingJobs(schedulerKey: string) {
           await job.remove();
           logger.info(
             { jobId: job.id, schedulerKey },
-            'Removed conflicting scheduler job',
+            'Removed conflicting scheduler job'
           );
         }
       }
@@ -37,6 +36,15 @@ export async function bootCron() {
       name: 'salt',
       type: 'salt',
       pattern: '0 0 * * *',
+    },
+    {
+      // The signal outbox. Every 15s rather than every minute: an
+      // `upgrade_gate_abandoned` that reaches outreach an hour late has missed
+      // the moment it was about. The drain is a single indexed query and a
+      // no-op when the table is empty.
+      name: 'signalOutbox',
+      type: 'signalOutbox',
+      pattern: 1000 * 15,
     },
     {
       name: 'delete',
@@ -82,6 +90,15 @@ export async function bootCron() {
       pattern: 1000 * 60,
     },
     {
+      // Every 15 minutes. This period is the measure evaluator's own cadence:
+      // a rule's forSeconds is validated against three of these, and the
+      // dedupe key that keeps `mcp_idle` to one signal per episode does not
+      // depend on it — see packages/gigapipe/src/measures/episode.ts.
+      name: 'measureSignals',
+      type: 'measureSignals',
+      pattern: 1000 * 60 * 15,
+    },
+    {
       name: 'insightsDaily',
       type: 'insightsDaily',
       pattern: '0 2 * * *',
@@ -95,6 +112,38 @@ export async function bootCron() {
       name: 'gscSync',
       type: 'gscSync',
       pattern: '0 3 * * *',
+    },
+    {
+      // SEO (SEO.md §6). The rank scheduler is the cadence at which a due
+      // project is picked up, not the rank cadence itself — that lives on
+      // SeoProjectConfig.rankNextRunAt.
+      name: 'seoRankScheduler',
+      type: 'seoRankScheduler',
+      pattern: '*/15 * * * *',
+    },
+    {
+      name: 'seoBacklinkScheduler',
+      type: 'seoBacklinkScheduler',
+      pattern: '30 3 * * *',
+    },
+    {
+      // First of the month: monthlySpendUsd is a calendar-month counter.
+      name: 'seoSpendReset',
+      type: 'seoSpendReset',
+      pattern: '0 0 1 * *',
+    },
+    {
+      name: 'seoBalanceRefresh',
+      type: 'seoBalanceRefresh',
+      pattern: '0 4 * * *',
+    },
+    {
+      // Monday 05:00, after the nightly GSC/backlink/balance jobs. Refreshes
+      // volume/difficulty/cpc for every active tracked keyword, one batched
+      // job per project.
+      name: 'seoMetricsRefresh',
+      type: 'seoMetricsRefresh',
+      pattern: '0 5 * * 1',
     },
     {
       name: 'cohortRefresh',
@@ -156,7 +205,7 @@ export async function bootCron() {
       await cronQueue.removeJobScheduler(jobScheduler.key).catch((error) => {
         logger.error(
           { err: error, jobScheduler: jobScheduler.key },
-          'Error removing job scheduler',
+          'Error removing job scheduler'
         );
       });
     }
@@ -174,11 +223,14 @@ export async function bootCron() {
               pattern: job.pattern,
             },
         {
+          // CronQueuePayload has grown past the 25 members TypeScript will
+          // discriminate on assignment; every member here is `payload:
+          // undefined`, so the cast only restates what the union says.
           data: {
             type: job.type,
             payload: undefined,
-          },
-        },
+          } as CronQueuePayload,
+        }
       );
     } catch (error) {
       // If upsert fails due to conflicting job, try to clean up and retry
@@ -189,7 +241,7 @@ export async function bootCron() {
       if (isConflictError) {
         logger.warn(
           { job: job.type },
-          'Job scheduler conflict detected, attempting cleanup',
+          'Job scheduler conflict detected, attempting cleanup'
         );
 
         await removeConflictingJobs(job.type);
@@ -216,23 +268,20 @@ export async function bootCron() {
               data: {
                 type: job.type,
                 payload: undefined,
-              },
-            },
+              } as CronQueuePayload,
+            }
           );
-          logger.info(
-            { job: job.type },
-            'Job scheduler created after cleanup',
-          );
+          logger.info({ job: job.type }, 'Job scheduler created after cleanup');
         } catch (retryError) {
           logger.error(
             { err: retryError, job: job.type },
-            'Error upserting job scheduler after cleanup',
+            'Error upserting job scheduler after cleanup'
           );
         }
       } else {
         logger.error(
           { err: error, job: job.type },
-          'Error upserting job scheduler',
+          'Error upserting job scheduler'
         );
       }
     }

@@ -22,6 +22,7 @@ import { realtimeRouter } from './routers/realtime';
 import { observabilityRouter } from './routers/observability';
 import { referenceRouter } from './routers/reference';
 import { reportRouter } from './routers/report';
+import { seoRouter } from './routers/seo';
 import { sessionRouter } from './routers/session';
 import { shareRouter } from './routers/share';
 import { subscriptionRouter } from './routers/subscription';
@@ -61,6 +62,7 @@ export const appRouter = createTRPCRouter({
   widget: widgetRouter,
   email: emailRouter,
   gsc: gscRouter,
+  seo: seoRouter,
   group: groupRouter,
   cohort: cohortRouter,
 });

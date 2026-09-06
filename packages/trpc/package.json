@@ -13,6 +13,7 @@
     "@openpanel/auth": "workspace:^",
     "@openpanel/common": "workspace:*",
     "@openpanel/constants": "workspace:*",
+    "@openpanel/dataforseo": "workspace:*",
     "@openpanel/db": "workspace:*",
     "@openpanel/email": "workspace:*",
     "@openpanel/gigapipe": "workspace:*",

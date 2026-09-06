@@ -7,6 +7,7 @@ import {
   db,
   getProjectByIdCached,
   matchEvent,
+  recordSignalsForEvent,
   sessionBuffer,
 } from '@openpanel/db';
 import type { ILogger } from '@openpanel/logger';
@@ -72,6 +73,21 @@ async function createEventAndNotify(
   const [event] = await Promise.all([
     createEvent(payload),
     checkNotificationRulesForEvent(payload).catch(() => null),
+    // The signal sink. Alongside the notification check rather than after it:
+    // both are rule tables read against the same event, and neither may hold
+    // up the other.
+    //
+    // The catch is deliberate. This writes an outbox row, so a failure here
+    // costs one signal — analytics ingestion must not stop because gtmsrv's
+    // outbox table is unavailable. The row is the durable part; delivery is a
+    // separate job that retries on its own.
+    recordSignalsForEvent(payload).catch((error) => {
+      logger.error(
+        { err: error, event: payload.name, projectId },
+        'Failed to record signals for event'
+      );
+      return 0;
+    }),
   ]);
   // Only after the event is accepted — recording the first event before a
   // failed createEvent would leave the activation checklist claiming data

@@ -109,6 +109,10 @@ export type EventsQueuePayload =
   | EventsQueuePayloadCreateSessionEnd
   | EventsQueuePayloadIncomingEvent;
 
+export type CronQueuePayloadMeasureSignals = {
+  type: 'measureSignals';
+  payload: undefined;
+};
 export type CronQueuePayloadSalt = {
   type: 'salt';
   payload: undefined;
@@ -189,7 +193,38 @@ export type CronQueuePayloadMetricAlerts = {
   type: 'metricAlerts';
   payload: undefined;
 };
+export type CronQueuePayloadSignalOutbox = {
+  type: 'signalOutbox';
+  payload: undefined;
+};
+export type CronQueuePayloadSeoRankScheduler = {
+  type: 'seoRankScheduler';
+  payload: undefined;
+};
+export type CronQueuePayloadSeoBacklinkScheduler = {
+  type: 'seoBacklinkScheduler';
+  payload: undefined;
+};
+export type CronQueuePayloadSeoSpendReset = {
+  type: 'seoSpendReset';
+  payload: undefined;
+};
+export type CronQueuePayloadSeoBalanceRefresh = {
+  type: 'seoBalanceRefresh';
+  payload: undefined;
+};
+export type CronQueuePayloadSeoMetricsRefresh = {
+  type: 'seoMetricsRefresh';
+  payload: undefined;
+};
 export type CronQueuePayload =
+  | CronQueuePayloadSeoRankScheduler
+  | CronQueuePayloadSeoBacklinkScheduler
+  | CronQueuePayloadSeoSpendReset
+  | CronQueuePayloadSeoBalanceRefresh
+  | CronQueuePayloadSeoMetricsRefresh
+  | CronQueuePayloadSignalOutbox
+  | CronQueuePayloadMeasureSignals
   | CronQueuePayloadMetricAlerts
   | CronQueuePayloadSalt
   | CronQueuePayloadFlushEvents
@@ -347,6 +382,60 @@ export const gscQueue = guardQueue(
   'gsc'
 );
 
+// SEO (SEO.md §6). One queue for every DataForSEO-backed job family; the
+// worker dispatcher in apps/worker/src/jobs/seo.ts fans out per `type`.
+export type SeoQueuePayloadRankRun = {
+  type: 'seoRankRun';
+  payload: { projectId: string; runId: string; keywordIds?: string[] };
+};
+export type SeoQueuePayloadRankTaskPoll = {
+  type: 'seoRankTaskPoll';
+  payload: {
+    projectId: string;
+    runId: string;
+    taskIds: string[];
+    /** Poll number, drives the re-enqueue backoff. Starts at 0. */
+    attempt?: number;
+  };
+};
+export type SeoQueuePayloadBacklinkSnapshot = {
+  type: 'seoBacklinkSnapshot';
+  payload: { projectId: string };
+};
+export type SeoQueuePayloadAuditStart = {
+  type: 'seoAuditStart';
+  payload: { projectId: string; auditId: string };
+};
+export type SeoQueuePayloadAuditPoll = {
+  type: 'seoAuditPoll';
+  payload: { projectId: string; auditId: string };
+};
+export type SeoQueuePayloadKeywordMetrics = {
+  type: 'seoKeywordMetrics';
+  payload: { projectId: string; keywords: string[] };
+};
+export type SeoQueuePayload =
+  | SeoQueuePayloadRankRun
+  | SeoQueuePayloadRankTaskPoll
+  | SeoQueuePayloadBacklinkSnapshot
+  | SeoQueuePayloadAuditStart
+  | SeoQueuePayloadAuditPoll
+  | SeoQueuePayloadKeywordMetrics;
+
+export const seoQueue = guardQueue(
+  new Queue<SeoQueuePayload>(getQueueName('seo'), {
+    connection: getRedisQueue(),
+    defaultJobOptions: {
+      // Polls re-enqueue themselves with a delay, so a run leaves a trail of
+      // short jobs; keep enough of them to debug a stuck run without letting
+      // the sets grow without bound.
+      removeOnComplete: { age: 3600, count: 200 },
+      removeOnFail: { age: 86_400, count: 200 },
+    },
+  }),
+  'seo'
+);
+
 export type CohortComputePayload = {
   cohortId: string;
 };
@@ -361,7 +450,7 @@ export const cohortComputeQueue = guardQueue(
       // it with a count bound to keep the completed/failed sets from growing
       // unbounded during quiet periods.
       removeOnComplete: { age: 3600, count: 100 },
-      removeOnFail: { age: 86400, count: 100 },
+      removeOnFail: { age: 86_400, count: 100 },
     },
   }),
   'cohortCompute'

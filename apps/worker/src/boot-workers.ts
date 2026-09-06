@@ -13,6 +13,7 @@ import {
   isKafkaConfigured,
   notificationQueue,
   queueLogger,
+  seoQueue,
   sessionsQueue,
 } from '@openpanel/queue';
 import { getRedisQueue } from '@openpanel/redis';
@@ -30,6 +31,7 @@ import { gscJob } from './jobs/gsc';
 import { importJob } from './jobs/import';
 import { insightsProjectJob } from './jobs/insights';
 import { notificationJob } from './jobs/notification';
+import { seoJob } from './jobs/seo';
 import { sessionsJob } from './jobs/sessions';
 import { eventsGroupJobDuration } from './metrics';
 import { setShuttingDown } from './utils/graceful-shutdown';
@@ -71,6 +73,7 @@ function getEnabledQueues(): QueueName[] {
       'import',
       'insights',
       'gsc',
+      'seo',
       'cohortCompute',
     ];
   }
@@ -269,6 +272,17 @@ export function bootWorkers() {
     });
     workers.push(gscWorker);
     logger.info({ concurrency }, 'Started worker for gsc');
+  }
+
+  // Start seo worker
+  if (enabledQueues.includes('seo')) {
+    const concurrency = getConcurrencyFor('seo', 5);
+    const seoWorker = new Worker(seoQueue.name, seoJob, {
+      ...workerOptions,
+      concurrency,
+    });
+    workers.push(seoWorker);
+    logger.info({ concurrency }, 'Started worker for seo');
   }
 
   // Start cohortCompute worker

@@ -45,7 +45,6 @@ import { Route as AppOrganizationIdIntegrationsTabsRouteImport } from './routes/
 import { Route as AppOrganizationIdAccountTabsRouteImport } from './routes/_app.$organizationId.account._tabs'
 import { Route as AppOrganizationIdProjectIdTracesRouteImport } from './routes/_app.$organizationId.$projectId.traces'
 import { Route as AppOrganizationIdProjectIdSessionsRouteImport } from './routes/_app.$organizationId.$projectId.sessions'
-import { Route as AppOrganizationIdProjectIdSeoRouteImport } from './routes/_app.$organizationId.$projectId.seo'
 import { Route as AppOrganizationIdProjectIdReportsRouteImport } from './routes/_app.$organizationId.$projectId.reports'
 import { Route as AppOrganizationIdProjectIdReferencesRouteImport } from './routes/_app.$organizationId.$projectId.references'
 import { Route as AppOrganizationIdProjectIdRealtimeRouteImport } from './routes/_app.$organizationId.$projectId.realtime'
@@ -67,12 +66,14 @@ import { Route as AppOrganizationIdAccountTabsTwoFactorRouteImport } from './rou
 import { Route as AppOrganizationIdAccountTabsEmailPreferencesRouteImport } from './routes/_app.$organizationId.account._tabs.email-preferences'
 import { Route as AppOrganizationIdProjectIdSettingsTabsRouteImport } from './routes/_app.$organizationId.$projectId.settings._tabs'
 import { Route as AppOrganizationIdProjectIdSessionsSessionIdRouteImport } from './routes/_app.$organizationId.$projectId.sessions_.$sessionId'
+import { Route as AppOrganizationIdProjectIdSeoTabsRouteImport } from './routes/_app.$organizationId.$projectId.seo._tabs'
 import { Route as AppOrganizationIdProjectIdReportsReportIdRouteImport } from './routes/_app.$organizationId.$projectId.reports_.$reportId'
 import { Route as AppOrganizationIdProjectIdProfilesTabsRouteImport } from './routes/_app.$organizationId.$projectId.profiles._tabs'
 import { Route as AppOrganizationIdProjectIdNotificationsTabsRouteImport } from './routes/_app.$organizationId.$projectId.notifications._tabs'
 import { Route as AppOrganizationIdProjectIdEventsTabsRouteImport } from './routes/_app.$organizationId.$projectId.events._tabs'
 import { Route as AppOrganizationIdProjectIdDashboardsDashboardIdRouteImport } from './routes/_app.$organizationId.$projectId.dashboards_.$dashboardId'
 import { Route as AppOrganizationIdProjectIdSettingsTabsIndexRouteImport } from './routes/_app.$organizationId.$projectId.settings._tabs.index'
+import { Route as AppOrganizationIdProjectIdSeoTabsIndexRouteImport } from './routes/_app.$organizationId.$projectId.seo._tabs.index'
 import { Route as AppOrganizationIdProjectIdProfilesTabsIndexRouteImport } from './routes/_app.$organizationId.$projectId.profiles._tabs.index'
 import { Route as AppOrganizationIdProjectIdNotificationsTabsIndexRouteImport } from './routes/_app.$organizationId.$projectId.notifications._tabs.index'
 import { Route as AppOrganizationIdProjectIdEventsTabsIndexRouteImport } from './routes/_app.$organizationId.$projectId.events._tabs.index'
@@ -83,7 +84,14 @@ import { Route as AppOrganizationIdProjectIdSettingsTabsImportsRouteImport } fro
 import { Route as AppOrganizationIdProjectIdSettingsTabsGscRouteImport } from './routes/_app.$organizationId.$projectId.settings._tabs.gsc'
 import { Route as AppOrganizationIdProjectIdSettingsTabsEventsRouteImport } from './routes/_app.$organizationId.$projectId.settings._tabs.events'
 import { Route as AppOrganizationIdProjectIdSettingsTabsDetailsRouteImport } from './routes/_app.$organizationId.$projectId.settings._tabs.details'
+import { Route as AppOrganizationIdProjectIdSettingsTabsDataforseoRouteImport } from './routes/_app.$organizationId.$projectId.settings._tabs.dataforseo'
 import { Route as AppOrganizationIdProjectIdSettingsTabsClientsRouteImport } from './routes/_app.$organizationId.$projectId.settings._tabs.clients'
+import { Route as AppOrganizationIdProjectIdSeoAuditAuditIdRouteImport } from './routes/_app.$organizationId.$projectId.seo_.audit.$auditId'
+import { Route as AppOrganizationIdProjectIdSeoTabsRankingsRouteImport } from './routes/_app.$organizationId.$projectId.seo._tabs.rankings'
+import { Route as AppOrganizationIdProjectIdSeoTabsKeywordsRouteImport } from './routes/_app.$organizationId.$projectId.seo._tabs.keywords'
+import { Route as AppOrganizationIdProjectIdSeoTabsBacklinksRouteImport } from './routes/_app.$organizationId.$projectId.seo._tabs.backlinks'
+import { Route as AppOrganizationIdProjectIdSeoTabsAuditRouteImport } from './routes/_app.$organizationId.$projectId.seo._tabs.audit'
+import { Route as AppOrganizationIdProjectIdSeoTabsAiRouteImport } from './routes/_app.$organizationId.$projectId.seo._tabs.ai'
 import { Route as AppOrganizationIdProjectIdProfilesTabsPowerUsersRouteImport } from './routes/_app.$organizationId.$projectId.profiles._tabs.power-users'
 import { Route as AppOrganizationIdProjectIdProfilesTabsIdentifiedRouteImport } from './routes/_app.$organizationId.$projectId.profiles._tabs.identified'
 import { Route as AppOrganizationIdProjectIdProfilesTabsAnonymousRouteImport } from './routes/_app.$organizationId.$projectId.profiles._tabs.anonymous'
@@ -116,6 +124,9 @@ const AppOrganizationIdAccountRouteImport = createFileRoute(
 )()
 const AppOrganizationIdProjectIdSettingsRouteImport = createFileRoute(
   '/_app/$organizationId/$projectId/settings',
+)()
+const AppOrganizationIdProjectIdSeoRouteImport = createFileRoute(
+  '/_app/$organizationId/$projectId/seo',
 )()
 const AppOrganizationIdProjectIdProfilesRouteImport = createFileRoute(
   '/_app/$organizationId/$projectId/profiles',
@@ -289,6 +300,12 @@ const AppOrganizationIdProjectIdSettingsRoute =
     path: '/settings',
     getParentRoute: () => AppOrganizationIdProjectIdRoute,
   } as any)
+const AppOrganizationIdProjectIdSeoRoute =
+  AppOrganizationIdProjectIdSeoRouteImport.update({
+    id: '/seo',
+    path: '/seo',
+    getParentRoute: () => AppOrganizationIdProjectIdRoute,
+  } as any)
 const AppOrganizationIdProjectIdProfilesRoute =
   AppOrganizationIdProjectIdProfilesRouteImport.update({
     id: '/profiles',
@@ -350,12 +367,6 @@ const AppOrganizationIdProjectIdSessionsRoute =
   AppOrganizationIdProjectIdSessionsRouteImport.update({
     id: '/sessions',
     path: '/sessions',
-    getParentRoute: () => AppOrganizationIdProjectIdRoute,
-  } as any)
-const AppOrganizationIdProjectIdSeoRoute =
-  AppOrganizationIdProjectIdSeoRouteImport.update({
-    id: '/seo',
-    path: '/seo',
     getParentRoute: () => AppOrganizationIdProjectIdRoute,
   } as any)
 const AppOrganizationIdProjectIdReportsRoute =
@@ -501,6 +512,11 @@ const AppOrganizationIdProjectIdSessionsSessionIdRoute =
     path: '/sessions/$sessionId',
     getParentRoute: () => AppOrganizationIdProjectIdRoute,
   } as any)
+const AppOrganizationIdProjectIdSeoTabsRoute =
+  AppOrganizationIdProjectIdSeoTabsRouteImport.update({
+    id: '/_tabs',
+    getParentRoute: () => AppOrganizationIdProjectIdSeoRoute,
+  } as any)
 const AppOrganizationIdProjectIdReportsReportIdRoute =
   AppOrganizationIdProjectIdReportsReportIdRouteImport.update({
     id: '/reports_/$reportId',
@@ -533,6 +549,12 @@ const AppOrganizationIdProjectIdSettingsTabsIndexRoute =
     id: '/',
     path: '/',
     getParentRoute: () => AppOrganizationIdProjectIdSettingsTabsRoute,
+  } as any)
+const AppOrganizationIdProjectIdSeoTabsIndexRoute =
+  AppOrganizationIdProjectIdSeoTabsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AppOrganizationIdProjectIdSeoTabsRoute,
   } as any)
 const AppOrganizationIdProjectIdProfilesTabsIndexRoute =
   AppOrganizationIdProjectIdProfilesTabsIndexRouteImport.update({
@@ -594,11 +616,53 @@ const AppOrganizationIdProjectIdSettingsTabsDetailsRoute =
     path: '/details',
     getParentRoute: () => AppOrganizationIdProjectIdSettingsTabsRoute,
   } as any)
+const AppOrganizationIdProjectIdSettingsTabsDataforseoRoute =
+  AppOrganizationIdProjectIdSettingsTabsDataforseoRouteImport.update({
+    id: '/dataforseo',
+    path: '/dataforseo',
+    getParentRoute: () => AppOrganizationIdProjectIdSettingsTabsRoute,
+  } as any)
 const AppOrganizationIdProjectIdSettingsTabsClientsRoute =
   AppOrganizationIdProjectIdSettingsTabsClientsRouteImport.update({
     id: '/clients',
     path: '/clients',
     getParentRoute: () => AppOrganizationIdProjectIdSettingsTabsRoute,
+  } as any)
+const AppOrganizationIdProjectIdSeoAuditAuditIdRoute =
+  AppOrganizationIdProjectIdSeoAuditAuditIdRouteImport.update({
+    id: '/seo_/audit/$auditId',
+    path: '/seo/audit/$auditId',
+    getParentRoute: () => AppOrganizationIdProjectIdRoute,
+  } as any)
+const AppOrganizationIdProjectIdSeoTabsRankingsRoute =
+  AppOrganizationIdProjectIdSeoTabsRankingsRouteImport.update({
+    id: '/rankings',
+    path: '/rankings',
+    getParentRoute: () => AppOrganizationIdProjectIdSeoTabsRoute,
+  } as any)
+const AppOrganizationIdProjectIdSeoTabsKeywordsRoute =
+  AppOrganizationIdProjectIdSeoTabsKeywordsRouteImport.update({
+    id: '/keywords',
+    path: '/keywords',
+    getParentRoute: () => AppOrganizationIdProjectIdSeoTabsRoute,
+  } as any)
+const AppOrganizationIdProjectIdSeoTabsBacklinksRoute =
+  AppOrganizationIdProjectIdSeoTabsBacklinksRouteImport.update({
+    id: '/backlinks',
+    path: '/backlinks',
+    getParentRoute: () => AppOrganizationIdProjectIdSeoTabsRoute,
+  } as any)
+const AppOrganizationIdProjectIdSeoTabsAuditRoute =
+  AppOrganizationIdProjectIdSeoTabsAuditRouteImport.update({
+    id: '/audit',
+    path: '/audit',
+    getParentRoute: () => AppOrganizationIdProjectIdSeoTabsRoute,
+  } as any)
+const AppOrganizationIdProjectIdSeoTabsAiRoute =
+  AppOrganizationIdProjectIdSeoTabsAiRouteImport.update({
+    id: '/ai',
+    path: '/ai',
+    getParentRoute: () => AppOrganizationIdProjectIdSeoTabsRoute,
   } as any)
 const AppOrganizationIdProjectIdProfilesTabsPowerUsersRoute =
   AppOrganizationIdProjectIdProfilesTabsPowerUsersRouteImport.update({
@@ -751,7 +815,6 @@ export interface FileRoutesByFullPath {
   '/$organizationId/$projectId/realtime': typeof AppOrganizationIdProjectIdRealtimeRoute
   '/$organizationId/$projectId/references': typeof AppOrganizationIdProjectIdReferencesRoute
   '/$organizationId/$projectId/reports': typeof AppOrganizationIdProjectIdReportsRoute
-  '/$organizationId/$projectId/seo': typeof AppOrganizationIdProjectIdSeoRoute
   '/$organizationId/$projectId/sessions': typeof AppOrganizationIdProjectIdSessionsRoute
   '/$organizationId/$projectId/traces': typeof AppOrganizationIdProjectIdTracesRoute
   '/$organizationId/account': typeof AppOrganizationIdAccountTabsRouteWithChildren
@@ -765,6 +828,7 @@ export interface FileRoutesByFullPath {
   '/$organizationId/$projectId/notifications': typeof AppOrganizationIdProjectIdNotificationsTabsRouteWithChildren
   '/$organizationId/$projectId/profiles': typeof AppOrganizationIdProjectIdProfilesTabsRouteWithChildren
   '/$organizationId/$projectId/reports/$reportId': typeof AppOrganizationIdProjectIdReportsReportIdRoute
+  '/$organizationId/$projectId/seo': typeof AppOrganizationIdProjectIdSeoTabsRouteWithChildren
   '/$organizationId/$projectId/sessions/$sessionId': typeof AppOrganizationIdProjectIdSessionsSessionIdRoute
   '/$organizationId/$projectId/settings': typeof AppOrganizationIdProjectIdSettingsTabsRouteWithChildren
   '/$organizationId/account/email-preferences': typeof AppOrganizationIdAccountTabsEmailPreferencesRoute
@@ -787,7 +851,14 @@ export interface FileRoutesByFullPath {
   '/$organizationId/$projectId/profiles/anonymous': typeof AppOrganizationIdProjectIdProfilesTabsAnonymousRoute
   '/$organizationId/$projectId/profiles/identified': typeof AppOrganizationIdProjectIdProfilesTabsIdentifiedRoute
   '/$organizationId/$projectId/profiles/power-users': typeof AppOrganizationIdProjectIdProfilesTabsPowerUsersRoute
+  '/$organizationId/$projectId/seo/ai': typeof AppOrganizationIdProjectIdSeoTabsAiRoute
+  '/$organizationId/$projectId/seo/audit': typeof AppOrganizationIdProjectIdSeoTabsAuditRoute
+  '/$organizationId/$projectId/seo/backlinks': typeof AppOrganizationIdProjectIdSeoTabsBacklinksRoute
+  '/$organizationId/$projectId/seo/keywords': typeof AppOrganizationIdProjectIdSeoTabsKeywordsRoute
+  '/$organizationId/$projectId/seo/rankings': typeof AppOrganizationIdProjectIdSeoTabsRankingsRoute
+  '/$organizationId/$projectId/seo/audit/$auditId': typeof AppOrganizationIdProjectIdSeoAuditAuditIdRoute
   '/$organizationId/$projectId/settings/clients': typeof AppOrganizationIdProjectIdSettingsTabsClientsRoute
+  '/$organizationId/$projectId/settings/dataforseo': typeof AppOrganizationIdProjectIdSettingsTabsDataforseoRoute
   '/$organizationId/$projectId/settings/details': typeof AppOrganizationIdProjectIdSettingsTabsDetailsRoute
   '/$organizationId/$projectId/settings/events': typeof AppOrganizationIdProjectIdSettingsTabsEventsRoute
   '/$organizationId/$projectId/settings/gsc': typeof AppOrganizationIdProjectIdSettingsTabsGscRoute
@@ -798,6 +869,7 @@ export interface FileRoutesByFullPath {
   '/$organizationId/$projectId/events/': typeof AppOrganizationIdProjectIdEventsTabsIndexRoute
   '/$organizationId/$projectId/notifications/': typeof AppOrganizationIdProjectIdNotificationsTabsIndexRoute
   '/$organizationId/$projectId/profiles/': typeof AppOrganizationIdProjectIdProfilesTabsIndexRoute
+  '/$organizationId/$projectId/seo/': typeof AppOrganizationIdProjectIdSeoTabsIndexRoute
   '/$organizationId/$projectId/settings/': typeof AppOrganizationIdProjectIdSettingsTabsIndexRoute
   '/$organizationId/$projectId/cohorts/$cohortId/events': typeof AppOrganizationIdProjectIdCohortsCohortIdTabsEventsRoute
   '/$organizationId/$projectId/cohorts/$cohortId/members': typeof AppOrganizationIdProjectIdCohortsCohortIdTabsMembersRoute
@@ -840,7 +912,6 @@ export interface FileRoutesByTo {
   '/$organizationId/$projectId/realtime': typeof AppOrganizationIdProjectIdRealtimeRoute
   '/$organizationId/$projectId/references': typeof AppOrganizationIdProjectIdReferencesRoute
   '/$organizationId/$projectId/reports': typeof AppOrganizationIdProjectIdReportsRoute
-  '/$organizationId/$projectId/seo': typeof AppOrganizationIdProjectIdSeoRoute
   '/$organizationId/$projectId/sessions': typeof AppOrganizationIdProjectIdSessionsRoute
   '/$organizationId/$projectId/traces': typeof AppOrganizationIdProjectIdTracesRoute
   '/$organizationId/account': typeof AppOrganizationIdAccountTabsIndexRoute
@@ -854,6 +925,7 @@ export interface FileRoutesByTo {
   '/$organizationId/$projectId/notifications': typeof AppOrganizationIdProjectIdNotificationsTabsIndexRoute
   '/$organizationId/$projectId/profiles': typeof AppOrganizationIdProjectIdProfilesTabsIndexRoute
   '/$organizationId/$projectId/reports/$reportId': typeof AppOrganizationIdProjectIdReportsReportIdRoute
+  '/$organizationId/$projectId/seo': typeof AppOrganizationIdProjectIdSeoTabsIndexRoute
   '/$organizationId/$projectId/sessions/$sessionId': typeof AppOrganizationIdProjectIdSessionsSessionIdRoute
   '/$organizationId/$projectId/settings': typeof AppOrganizationIdProjectIdSettingsTabsIndexRoute
   '/$organizationId/account/email-preferences': typeof AppOrganizationIdAccountTabsEmailPreferencesRoute
@@ -873,7 +945,14 @@ export interface FileRoutesByTo {
   '/$organizationId/$projectId/profiles/anonymous': typeof AppOrganizationIdProjectIdProfilesTabsAnonymousRoute
   '/$organizationId/$projectId/profiles/identified': typeof AppOrganizationIdProjectIdProfilesTabsIdentifiedRoute
   '/$organizationId/$projectId/profiles/power-users': typeof AppOrganizationIdProjectIdProfilesTabsPowerUsersRoute
+  '/$organizationId/$projectId/seo/ai': typeof AppOrganizationIdProjectIdSeoTabsAiRoute
+  '/$organizationId/$projectId/seo/audit': typeof AppOrganizationIdProjectIdSeoTabsAuditRoute
+  '/$organizationId/$projectId/seo/backlinks': typeof AppOrganizationIdProjectIdSeoTabsBacklinksRoute
+  '/$organizationId/$projectId/seo/keywords': typeof AppOrganizationIdProjectIdSeoTabsKeywordsRoute
+  '/$organizationId/$projectId/seo/rankings': typeof AppOrganizationIdProjectIdSeoTabsRankingsRoute
+  '/$organizationId/$projectId/seo/audit/$auditId': typeof AppOrganizationIdProjectIdSeoAuditAuditIdRoute
   '/$organizationId/$projectId/settings/clients': typeof AppOrganizationIdProjectIdSettingsTabsClientsRoute
+  '/$organizationId/$projectId/settings/dataforseo': typeof AppOrganizationIdProjectIdSettingsTabsDataforseoRoute
   '/$organizationId/$projectId/settings/details': typeof AppOrganizationIdProjectIdSettingsTabsDetailsRoute
   '/$organizationId/$projectId/settings/events': typeof AppOrganizationIdProjectIdSettingsTabsEventsRoute
   '/$organizationId/$projectId/settings/gsc': typeof AppOrganizationIdProjectIdSettingsTabsGscRoute
@@ -926,7 +1005,6 @@ export interface FileRoutesById {
   '/_app/$organizationId/$projectId/realtime': typeof AppOrganizationIdProjectIdRealtimeRoute
   '/_app/$organizationId/$projectId/references': typeof AppOrganizationIdProjectIdReferencesRoute
   '/_app/$organizationId/$projectId/reports': typeof AppOrganizationIdProjectIdReportsRoute
-  '/_app/$organizationId/$projectId/seo': typeof AppOrganizationIdProjectIdSeoRoute
   '/_app/$organizationId/$projectId/sessions': typeof AppOrganizationIdProjectIdSessionsRoute
   '/_app/$organizationId/$projectId/traces': typeof AppOrganizationIdProjectIdTracesRoute
   '/_app/$organizationId/account': typeof AppOrganizationIdAccountRouteWithChildren
@@ -946,6 +1024,8 @@ export interface FileRoutesById {
   '/_app/$organizationId/$projectId/profiles': typeof AppOrganizationIdProjectIdProfilesRouteWithChildren
   '/_app/$organizationId/$projectId/profiles/_tabs': typeof AppOrganizationIdProjectIdProfilesTabsRouteWithChildren
   '/_app/$organizationId/$projectId/reports_/$reportId': typeof AppOrganizationIdProjectIdReportsReportIdRoute
+  '/_app/$organizationId/$projectId/seo': typeof AppOrganizationIdProjectIdSeoRouteWithChildren
+  '/_app/$organizationId/$projectId/seo/_tabs': typeof AppOrganizationIdProjectIdSeoTabsRouteWithChildren
   '/_app/$organizationId/$projectId/sessions_/$sessionId': typeof AppOrganizationIdProjectIdSessionsSessionIdRoute
   '/_app/$organizationId/$projectId/settings': typeof AppOrganizationIdProjectIdSettingsRouteWithChildren
   '/_app/$organizationId/$projectId/settings/_tabs': typeof AppOrganizationIdProjectIdSettingsTabsRouteWithChildren
@@ -972,7 +1052,14 @@ export interface FileRoutesById {
   '/_app/$organizationId/$projectId/profiles/_tabs/anonymous': typeof AppOrganizationIdProjectIdProfilesTabsAnonymousRoute
   '/_app/$organizationId/$projectId/profiles/_tabs/identified': typeof AppOrganizationIdProjectIdProfilesTabsIdentifiedRoute
   '/_app/$organizationId/$projectId/profiles/_tabs/power-users': typeof AppOrganizationIdProjectIdProfilesTabsPowerUsersRoute
+  '/_app/$organizationId/$projectId/seo/_tabs/ai': typeof AppOrganizationIdProjectIdSeoTabsAiRoute
+  '/_app/$organizationId/$projectId/seo/_tabs/audit': typeof AppOrganizationIdProjectIdSeoTabsAuditRoute
+  '/_app/$organizationId/$projectId/seo/_tabs/backlinks': typeof AppOrganizationIdProjectIdSeoTabsBacklinksRoute
+  '/_app/$organizationId/$projectId/seo/_tabs/keywords': typeof AppOrganizationIdProjectIdSeoTabsKeywordsRoute
+  '/_app/$organizationId/$projectId/seo/_tabs/rankings': typeof AppOrganizationIdProjectIdSeoTabsRankingsRoute
+  '/_app/$organizationId/$projectId/seo_/audit/$auditId': typeof AppOrganizationIdProjectIdSeoAuditAuditIdRoute
   '/_app/$organizationId/$projectId/settings/_tabs/clients': typeof AppOrganizationIdProjectIdSettingsTabsClientsRoute
+  '/_app/$organizationId/$projectId/settings/_tabs/dataforseo': typeof AppOrganizationIdProjectIdSettingsTabsDataforseoRoute
   '/_app/$organizationId/$projectId/settings/_tabs/details': typeof AppOrganizationIdProjectIdSettingsTabsDetailsRoute
   '/_app/$organizationId/$projectId/settings/_tabs/events': typeof AppOrganizationIdProjectIdSettingsTabsEventsRoute
   '/_app/$organizationId/$projectId/settings/_tabs/gsc': typeof AppOrganizationIdProjectIdSettingsTabsGscRoute
@@ -983,6 +1070,7 @@ export interface FileRoutesById {
   '/_app/$organizationId/$projectId/events/_tabs/': typeof AppOrganizationIdProjectIdEventsTabsIndexRoute
   '/_app/$organizationId/$projectId/notifications/_tabs/': typeof AppOrganizationIdProjectIdNotificationsTabsIndexRoute
   '/_app/$organizationId/$projectId/profiles/_tabs/': typeof AppOrganizationIdProjectIdProfilesTabsIndexRoute
+  '/_app/$organizationId/$projectId/seo/_tabs/': typeof AppOrganizationIdProjectIdSeoTabsIndexRoute
   '/_app/$organizationId/$projectId/settings/_tabs/': typeof AppOrganizationIdProjectIdSettingsTabsIndexRoute
   '/_app/$organizationId/$projectId/cohorts_/$cohortId/_tabs/events': typeof AppOrganizationIdProjectIdCohortsCohortIdTabsEventsRoute
   '/_app/$organizationId/$projectId/cohorts_/$cohortId/_tabs/members': typeof AppOrganizationIdProjectIdCohortsCohortIdTabsMembersRoute
@@ -1029,7 +1117,6 @@ export interface FileRouteTypes {
     | '/$organizationId/$projectId/realtime'
     | '/$organizationId/$projectId/references'
     | '/$organizationId/$projectId/reports'
-    | '/$organizationId/$projectId/seo'
     | '/$organizationId/$projectId/sessions'
     | '/$organizationId/$projectId/traces'
     | '/$organizationId/account'
@@ -1043,6 +1130,7 @@ export interface FileRouteTypes {
     | '/$organizationId/$projectId/notifications'
     | '/$organizationId/$projectId/profiles'
     | '/$organizationId/$projectId/reports/$reportId'
+    | '/$organizationId/$projectId/seo'
     | '/$organizationId/$projectId/sessions/$sessionId'
     | '/$organizationId/$projectId/settings'
     | '/$organizationId/account/email-preferences'
@@ -1065,7 +1153,14 @@ export interface FileRouteTypes {
     | '/$organizationId/$projectId/profiles/anonymous'
     | '/$organizationId/$projectId/profiles/identified'
     | '/$organizationId/$projectId/profiles/power-users'
+    | '/$organizationId/$projectId/seo/ai'
+    | '/$organizationId/$projectId/seo/audit'
+    | '/$organizationId/$projectId/seo/backlinks'
+    | '/$organizationId/$projectId/seo/keywords'
+    | '/$organizationId/$projectId/seo/rankings'
+    | '/$organizationId/$projectId/seo/audit/$auditId'
     | '/$organizationId/$projectId/settings/clients'
+    | '/$organizationId/$projectId/settings/dataforseo'
     | '/$organizationId/$projectId/settings/details'
     | '/$organizationId/$projectId/settings/events'
     | '/$organizationId/$projectId/settings/gsc'
@@ -1076,6 +1171,7 @@ export interface FileRouteTypes {
     | '/$organizationId/$projectId/events/'
     | '/$organizationId/$projectId/notifications/'
     | '/$organizationId/$projectId/profiles/'
+    | '/$organizationId/$projectId/seo/'
     | '/$organizationId/$projectId/settings/'
     | '/$organizationId/$projectId/cohorts/$cohortId/events'
     | '/$organizationId/$projectId/cohorts/$cohortId/members'
@@ -1118,7 +1214,6 @@ export interface FileRouteTypes {
     | '/$organizationId/$projectId/realtime'
     | '/$organizationId/$projectId/references'
     | '/$organizationId/$projectId/reports'
-    | '/$organizationId/$projectId/seo'
     | '/$organizationId/$projectId/sessions'
     | '/$organizationId/$projectId/traces'
     | '/$organizationId/account'
@@ -1132,6 +1227,7 @@ export interface FileRouteTypes {
     | '/$organizationId/$projectId/notifications'
     | '/$organizationId/$projectId/profiles'
     | '/$organizationId/$projectId/reports/$reportId'
+    | '/$organizationId/$projectId/seo'
     | '/$organizationId/$projectId/sessions/$sessionId'
     | '/$organizationId/$projectId/settings'
     | '/$organizationId/account/email-preferences'
@@ -1151,7 +1247,14 @@ export interface FileRouteTypes {
     | '/$organizationId/$projectId/profiles/anonymous'
     | '/$organizationId/$projectId/profiles/identified'
     | '/$organizationId/$projectId/profiles/power-users'
+    | '/$organizationId/$projectId/seo/ai'
+    | '/$organizationId/$projectId/seo/audit'
+    | '/$organizationId/$projectId/seo/backlinks'
+    | '/$organizationId/$projectId/seo/keywords'
+    | '/$organizationId/$projectId/seo/rankings'
+    | '/$organizationId/$projectId/seo/audit/$auditId'
     | '/$organizationId/$projectId/settings/clients'
+    | '/$organizationId/$projectId/settings/dataforseo'
     | '/$organizationId/$projectId/settings/details'
     | '/$organizationId/$projectId/settings/events'
     | '/$organizationId/$projectId/settings/gsc'
@@ -1203,7 +1306,6 @@ export interface FileRouteTypes {
     | '/_app/$organizationId/$projectId/realtime'
     | '/_app/$organizationId/$projectId/references'
     | '/_app/$organizationId/$projectId/reports'
-    | '/_app/$organizationId/$projectId/seo'
     | '/_app/$organizationId/$projectId/sessions'
     | '/_app/$organizationId/$projectId/traces'
     | '/_app/$organizationId/account'
@@ -1223,6 +1325,8 @@ export interface FileRouteTypes {
     | '/_app/$organizationId/$projectId/profiles'
     | '/_app/$organizationId/$projectId/profiles/_tabs'
     | '/_app/$organizationId/$projectId/reports_/$reportId'
+    | '/_app/$organizationId/$projectId/seo'
+    | '/_app/$organizationId/$projectId/seo/_tabs'
     | '/_app/$organizationId/$projectId/sessions_/$sessionId'
     | '/_app/$organizationId/$projectId/settings'
     | '/_app/$organizationId/$projectId/settings/_tabs'
@@ -1249,7 +1353,14 @@ export interface FileRouteTypes {
     | '/_app/$organizationId/$projectId/profiles/_tabs/anonymous'
     | '/_app/$organizationId/$projectId/profiles/_tabs/identified'
     | '/_app/$organizationId/$projectId/profiles/_tabs/power-users'
+    | '/_app/$organizationId/$projectId/seo/_tabs/ai'
+    | '/_app/$organizationId/$projectId/seo/_tabs/audit'
+    | '/_app/$organizationId/$projectId/seo/_tabs/backlinks'
+    | '/_app/$organizationId/$projectId/seo/_tabs/keywords'
+    | '/_app/$organizationId/$projectId/seo/_tabs/rankings'
+    | '/_app/$organizationId/$projectId/seo_/audit/$auditId'
     | '/_app/$organizationId/$projectId/settings/_tabs/clients'
+    | '/_app/$organizationId/$projectId/settings/_tabs/dataforseo'
     | '/_app/$organizationId/$projectId/settings/_tabs/details'
     | '/_app/$organizationId/$projectId/settings/_tabs/events'
     | '/_app/$organizationId/$projectId/settings/_tabs/gsc'
@@ -1260,6 +1371,7 @@ export interface FileRouteTypes {
     | '/_app/$organizationId/$projectId/events/_tabs/'
     | '/_app/$organizationId/$projectId/notifications/_tabs/'
     | '/_app/$organizationId/$projectId/profiles/_tabs/'
+    | '/_app/$organizationId/$projectId/seo/_tabs/'
     | '/_app/$organizationId/$projectId/settings/_tabs/'
     | '/_app/$organizationId/$projectId/cohorts_/$cohortId/_tabs/events'
     | '/_app/$organizationId/$projectId/cohorts_/$cohortId/_tabs/members'
@@ -1502,6 +1614,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOrganizationIdProjectIdSettingsRouteImport
       parentRoute: typeof AppOrganizationIdProjectIdRoute
     }
+    '/_app/$organizationId/$projectId/seo': {
+      id: '/_app/$organizationId/$projectId/seo'
+      path: '/seo'
+      fullPath: '/$organizationId/$projectId/seo'
+      preLoaderRoute: typeof AppOrganizationIdProjectIdSeoRouteImport
+      parentRoute: typeof AppOrganizationIdProjectIdRoute
+    }
     '/_app/$organizationId/$projectId/profiles': {
       id: '/_app/$organizationId/$projectId/profiles'
       path: '/profiles'
@@ -1577,13 +1696,6 @@ declare module '@tanstack/react-router' {
       path: '/sessions'
       fullPath: '/$organizationId/$projectId/sessions'
       preLoaderRoute: typeof AppOrganizationIdProjectIdSessionsRouteImport
-      parentRoute: typeof AppOrganizationIdProjectIdRoute
-    }
-    '/_app/$organizationId/$projectId/seo': {
-      id: '/_app/$organizationId/$projectId/seo'
-      path: '/seo'
-      fullPath: '/$organizationId/$projectId/seo'
-      preLoaderRoute: typeof AppOrganizationIdProjectIdSeoRouteImport
       parentRoute: typeof AppOrganizationIdProjectIdRoute
     }
     '/_app/$organizationId/$projectId/reports': {
@@ -1754,6 +1866,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOrganizationIdProjectIdSessionsSessionIdRouteImport
       parentRoute: typeof AppOrganizationIdProjectIdRoute
     }
+    '/_app/$organizationId/$projectId/seo/_tabs': {
+      id: '/_app/$organizationId/$projectId/seo/_tabs'
+      path: '/seo'
+      fullPath: '/$organizationId/$projectId/seo'
+      preLoaderRoute: typeof AppOrganizationIdProjectIdSeoTabsRouteImport
+      parentRoute: typeof AppOrganizationIdProjectIdSeoRoute
+    }
     '/_app/$organizationId/$projectId/reports_/$reportId': {
       id: '/_app/$organizationId/$projectId/reports_/$reportId'
       path: '/reports/$reportId'
@@ -1795,6 +1914,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/$organizationId/$projectId/settings/'
       preLoaderRoute: typeof AppOrganizationIdProjectIdSettingsTabsIndexRouteImport
       parentRoute: typeof AppOrganizationIdProjectIdSettingsTabsRoute
+    }
+    '/_app/$organizationId/$projectId/seo/_tabs/': {
+      id: '/_app/$organizationId/$projectId/seo/_tabs/'
+      path: '/'
+      fullPath: '/$organizationId/$projectId/seo/'
+      preLoaderRoute: typeof AppOrganizationIdProjectIdSeoTabsIndexRouteImport
+      parentRoute: typeof AppOrganizationIdProjectIdSeoTabsRoute
     }
     '/_app/$organizationId/$projectId/profiles/_tabs/': {
       id: '/_app/$organizationId/$projectId/profiles/_tabs/'
@@ -1866,12 +1992,61 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOrganizationIdProjectIdSettingsTabsDetailsRouteImport
       parentRoute: typeof AppOrganizationIdProjectIdSettingsTabsRoute
     }
+    '/_app/$organizationId/$projectId/settings/_tabs/dataforseo': {
+      id: '/_app/$organizationId/$projectId/settings/_tabs/dataforseo'
+      path: '/dataforseo'
+      fullPath: '/$organizationId/$projectId/settings/dataforseo'
+      preLoaderRoute: typeof AppOrganizationIdProjectIdSettingsTabsDataforseoRouteImport
+      parentRoute: typeof AppOrganizationIdProjectIdSettingsTabsRoute
+    }
     '/_app/$organizationId/$projectId/settings/_tabs/clients': {
       id: '/_app/$organizationId/$projectId/settings/_tabs/clients'
       path: '/clients'
       fullPath: '/$organizationId/$projectId/settings/clients'
       preLoaderRoute: typeof AppOrganizationIdProjectIdSettingsTabsClientsRouteImport
       parentRoute: typeof AppOrganizationIdProjectIdSettingsTabsRoute
+    }
+    '/_app/$organizationId/$projectId/seo_/audit/$auditId': {
+      id: '/_app/$organizationId/$projectId/seo_/audit/$auditId'
+      path: '/seo/audit/$auditId'
+      fullPath: '/$organizationId/$projectId/seo/audit/$auditId'
+      preLoaderRoute: typeof AppOrganizationIdProjectIdSeoAuditAuditIdRouteImport
+      parentRoute: typeof AppOrganizationIdProjectIdRoute
+    }
+    '/_app/$organizationId/$projectId/seo/_tabs/rankings': {
+      id: '/_app/$organizationId/$projectId/seo/_tabs/rankings'
+      path: '/rankings'
+      fullPath: '/$organizationId/$projectId/seo/rankings'
+      preLoaderRoute: typeof AppOrganizationIdProjectIdSeoTabsRankingsRouteImport
+      parentRoute: typeof AppOrganizationIdProjectIdSeoTabsRoute
+    }
+    '/_app/$organizationId/$projectId/seo/_tabs/keywords': {
+      id: '/_app/$organizationId/$projectId/seo/_tabs/keywords'
+      path: '/keywords'
+      fullPath: '/$organizationId/$projectId/seo/keywords'
+      preLoaderRoute: typeof AppOrganizationIdProjectIdSeoTabsKeywordsRouteImport
+      parentRoute: typeof AppOrganizationIdProjectIdSeoTabsRoute
+    }
+    '/_app/$organizationId/$projectId/seo/_tabs/backlinks': {
+      id: '/_app/$organizationId/$projectId/seo/_tabs/backlinks'
+      path: '/backlinks'
+      fullPath: '/$organizationId/$projectId/seo/backlinks'
+      preLoaderRoute: typeof AppOrganizationIdProjectIdSeoTabsBacklinksRouteImport
+      parentRoute: typeof AppOrganizationIdProjectIdSeoTabsRoute
+    }
+    '/_app/$organizationId/$projectId/seo/_tabs/audit': {
+      id: '/_app/$organizationId/$projectId/seo/_tabs/audit'
+      path: '/audit'
+      fullPath: '/$organizationId/$projectId/seo/audit'
+      preLoaderRoute: typeof AppOrganizationIdProjectIdSeoTabsAuditRouteImport
+      parentRoute: typeof AppOrganizationIdProjectIdSeoTabsRoute
+    }
+    '/_app/$organizationId/$projectId/seo/_tabs/ai': {
+      id: '/_app/$organizationId/$projectId/seo/_tabs/ai'
+      path: '/ai'
+      fullPath: '/$organizationId/$projectId/seo/ai'
+      preLoaderRoute: typeof AppOrganizationIdProjectIdSeoTabsAiRouteImport
+      parentRoute: typeof AppOrganizationIdProjectIdSeoTabsRoute
     }
     '/_app/$organizationId/$projectId/profiles/_tabs/power-users': {
       id: '/_app/$organizationId/$projectId/profiles/_tabs/power-users'
@@ -2169,8 +2344,54 @@ const AppOrganizationIdProjectIdProfilesRouteWithChildren =
     AppOrganizationIdProjectIdProfilesRouteChildren,
   )
 
+interface AppOrganizationIdProjectIdSeoTabsRouteChildren {
+  AppOrganizationIdProjectIdSeoTabsAiRoute: typeof AppOrganizationIdProjectIdSeoTabsAiRoute
+  AppOrganizationIdProjectIdSeoTabsAuditRoute: typeof AppOrganizationIdProjectIdSeoTabsAuditRoute
+  AppOrganizationIdProjectIdSeoTabsBacklinksRoute: typeof AppOrganizationIdProjectIdSeoTabsBacklinksRoute
+  AppOrganizationIdProjectIdSeoTabsKeywordsRoute: typeof AppOrganizationIdProjectIdSeoTabsKeywordsRoute
+  AppOrganizationIdProjectIdSeoTabsRankingsRoute: typeof AppOrganizationIdProjectIdSeoTabsRankingsRoute
+  AppOrganizationIdProjectIdSeoTabsIndexRoute: typeof AppOrganizationIdProjectIdSeoTabsIndexRoute
+}
+
+const AppOrganizationIdProjectIdSeoTabsRouteChildren: AppOrganizationIdProjectIdSeoTabsRouteChildren =
+  {
+    AppOrganizationIdProjectIdSeoTabsAiRoute:
+      AppOrganizationIdProjectIdSeoTabsAiRoute,
+    AppOrganizationIdProjectIdSeoTabsAuditRoute:
+      AppOrganizationIdProjectIdSeoTabsAuditRoute,
+    AppOrganizationIdProjectIdSeoTabsBacklinksRoute:
+      AppOrganizationIdProjectIdSeoTabsBacklinksRoute,
+    AppOrganizationIdProjectIdSeoTabsKeywordsRoute:
+      AppOrganizationIdProjectIdSeoTabsKeywordsRoute,
+    AppOrganizationIdProjectIdSeoTabsRankingsRoute:
+      AppOrganizationIdProjectIdSeoTabsRankingsRoute,
+    AppOrganizationIdProjectIdSeoTabsIndexRoute:
+      AppOrganizationIdProjectIdSeoTabsIndexRoute,
+  }
+
+const AppOrganizationIdProjectIdSeoTabsRouteWithChildren =
+  AppOrganizationIdProjectIdSeoTabsRoute._addFileChildren(
+    AppOrganizationIdProjectIdSeoTabsRouteChildren,
+  )
+
+interface AppOrganizationIdProjectIdSeoRouteChildren {
+  AppOrganizationIdProjectIdSeoTabsRoute: typeof AppOrganizationIdProjectIdSeoTabsRouteWithChildren
+}
+
+const AppOrganizationIdProjectIdSeoRouteChildren: AppOrganizationIdProjectIdSeoRouteChildren =
+  {
+    AppOrganizationIdProjectIdSeoTabsRoute:
+      AppOrganizationIdProjectIdSeoTabsRouteWithChildren,
+  }
+
+const AppOrganizationIdProjectIdSeoRouteWithChildren =
+  AppOrganizationIdProjectIdSeoRoute._addFileChildren(
+    AppOrganizationIdProjectIdSeoRouteChildren,
+  )
+
 interface AppOrganizationIdProjectIdSettingsTabsRouteChildren {
   AppOrganizationIdProjectIdSettingsTabsClientsRoute: typeof AppOrganizationIdProjectIdSettingsTabsClientsRoute
+  AppOrganizationIdProjectIdSettingsTabsDataforseoRoute: typeof AppOrganizationIdProjectIdSettingsTabsDataforseoRoute
   AppOrganizationIdProjectIdSettingsTabsDetailsRoute: typeof AppOrganizationIdProjectIdSettingsTabsDetailsRoute
   AppOrganizationIdProjectIdSettingsTabsEventsRoute: typeof AppOrganizationIdProjectIdSettingsTabsEventsRoute
   AppOrganizationIdProjectIdSettingsTabsGscRoute: typeof AppOrganizationIdProjectIdSettingsTabsGscRoute
@@ -2185,6 +2406,8 @@ const AppOrganizationIdProjectIdSettingsTabsRouteChildren: AppOrganizationIdProj
   {
     AppOrganizationIdProjectIdSettingsTabsClientsRoute:
       AppOrganizationIdProjectIdSettingsTabsClientsRoute,
+    AppOrganizationIdProjectIdSettingsTabsDataforseoRoute:
+      AppOrganizationIdProjectIdSettingsTabsDataforseoRoute,
     AppOrganizationIdProjectIdSettingsTabsDetailsRoute:
       AppOrganizationIdProjectIdSettingsTabsDetailsRoute,
     AppOrganizationIdProjectIdSettingsTabsEventsRoute:
@@ -2306,7 +2529,6 @@ interface AppOrganizationIdProjectIdRouteChildren {
   AppOrganizationIdProjectIdRealtimeRoute: typeof AppOrganizationIdProjectIdRealtimeRoute
   AppOrganizationIdProjectIdReferencesRoute: typeof AppOrganizationIdProjectIdReferencesRoute
   AppOrganizationIdProjectIdReportsRoute: typeof AppOrganizationIdProjectIdReportsRoute
-  AppOrganizationIdProjectIdSeoRoute: typeof AppOrganizationIdProjectIdSeoRoute
   AppOrganizationIdProjectIdSessionsRoute: typeof AppOrganizationIdProjectIdSessionsRoute
   AppOrganizationIdProjectIdTracesRoute: typeof AppOrganizationIdProjectIdTracesRoute
   AppOrganizationIdProjectIdIndexRoute: typeof AppOrganizationIdProjectIdIndexRoute
@@ -2315,10 +2537,12 @@ interface AppOrganizationIdProjectIdRouteChildren {
   AppOrganizationIdProjectIdNotificationsRoute: typeof AppOrganizationIdProjectIdNotificationsRouteWithChildren
   AppOrganizationIdProjectIdProfilesRoute: typeof AppOrganizationIdProjectIdProfilesRouteWithChildren
   AppOrganizationIdProjectIdReportsReportIdRoute: typeof AppOrganizationIdProjectIdReportsReportIdRoute
+  AppOrganizationIdProjectIdSeoRoute: typeof AppOrganizationIdProjectIdSeoRouteWithChildren
   AppOrganizationIdProjectIdSessionsSessionIdRoute: typeof AppOrganizationIdProjectIdSessionsSessionIdRoute
   AppOrganizationIdProjectIdSettingsRoute: typeof AppOrganizationIdProjectIdSettingsRouteWithChildren
   AppOrganizationIdProjectIdCohortsCohortIdRoute: typeof AppOrganizationIdProjectIdCohortsCohortIdRouteWithChildren
   AppOrganizationIdProjectIdGroupsGroupIdRoute: typeof AppOrganizationIdProjectIdGroupsGroupIdRouteWithChildren
+  AppOrganizationIdProjectIdSeoAuditAuditIdRoute: typeof AppOrganizationIdProjectIdSeoAuditAuditIdRoute
 }
 
 const AppOrganizationIdProjectIdRouteChildren: AppOrganizationIdProjectIdRouteChildren =
@@ -2341,7 +2565,6 @@ const AppOrganizationIdProjectIdRouteChildren: AppOrganizationIdProjectIdRouteCh
       AppOrganizationIdProjectIdReferencesRoute,
     AppOrganizationIdProjectIdReportsRoute:
       AppOrganizationIdProjectIdReportsRoute,
-    AppOrganizationIdProjectIdSeoRoute: AppOrganizationIdProjectIdSeoRoute,
     AppOrganizationIdProjectIdSessionsRoute:
       AppOrganizationIdProjectIdSessionsRoute,
     AppOrganizationIdProjectIdTracesRoute:
@@ -2357,6 +2580,8 @@ const AppOrganizationIdProjectIdRouteChildren: AppOrganizationIdProjectIdRouteCh
       AppOrganizationIdProjectIdProfilesRouteWithChildren,
     AppOrganizationIdProjectIdReportsReportIdRoute:
       AppOrganizationIdProjectIdReportsReportIdRoute,
+    AppOrganizationIdProjectIdSeoRoute:
+      AppOrganizationIdProjectIdSeoRouteWithChildren,
     AppOrganizationIdProjectIdSessionsSessionIdRoute:
       AppOrganizationIdProjectIdSessionsSessionIdRoute,
     AppOrganizationIdProjectIdSettingsRoute:
@@ -2365,6 +2590,8 @@ const AppOrganizationIdProjectIdRouteChildren: AppOrganizationIdProjectIdRouteCh
       AppOrganizationIdProjectIdCohortsCohortIdRouteWithChildren,
     AppOrganizationIdProjectIdGroupsGroupIdRoute:
       AppOrganizationIdProjectIdGroupsGroupIdRouteWithChildren,
+    AppOrganizationIdProjectIdSeoAuditAuditIdRoute:
+      AppOrganizationIdProjectIdSeoAuditAuditIdRoute,
   }
 
 const AppOrganizationIdProjectIdRouteWithChildren =

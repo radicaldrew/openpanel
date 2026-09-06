@@ -82,6 +82,7 @@ model Organization {
   integrations    Integration[]
   invites         Invite[]
   conversations   Conversation[]
+  dataForSeoConnection DataForSeoConnection?
   timezone        String?
   onboarding      String?          @default("completed")
 
@@ -293,6 +294,12 @@ model Project {
   gscConnection     GscConnection?
   cohorts           Cohort[]
   savedTelemetrySearches SavedTelemetrySearch[]
+  signalRules       SignalRule[]
+  signalOutbox      SignalOutbox[]
+  seoConfig         SeoProjectConfig?
+  seoTrackedKeywords SeoTrackedKeyword[]
+  seoRankRuns       SeoRankRun[]
+  seoAudits         SeoAudit[]
 
   // When deleteAt > now(), the project will be deleted
   deleteAt DateTime?
@@ -849,4 +856,191 @@ model EmailUnsubscribe {
 
   @@unique([email, category])
   @@map("email_unsubscribes")
+}
+
+/// A rule that turns an analytics event into a gtmsrv signal.
+///
+/// Rows, not code. SPEC §2.3's onboarding promise is "point your SDK at us and
+/// map events to signals", which only holds if adding a mapping is an INSERT
+/// rather than a deploy. The match half deliberately reuses the same event-name
+/// + filter shape the rest of OpenPanel already uses for notification rules and
+/// charts (`matchEvent`), so a marketer writes the filter they already know and
+/// there is one filter semantics in the product rather than two.
+model SignalRule {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// Human label, shown when explaining why a signal fired.
+  name String
+
+  /// The OpenPanel event name to match, or "*" for every event.
+  eventName String
+
+  /// Property filters, ANDed. Same shape as a chart's event filters.
+  /// [IPrismaSignalRuleFilters]
+  filters Json @default("[]")
+
+  /// The gtmsrv signal kind this produces, e.g. "pricing_page_visit".
+  signalKind String
+  /// 0-100, the source's own confidence. Carried through to the signal.
+  strength Int @default(50)
+
+  /// Disabled rules stay readable. Deleting a rule loses why it existed.
+  enabled Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([projectId, enabled])
+  @@map("signal_rules")
+}
+
+/// One signal owed to gtmsrv.
+///
+/// An outbox rather than a POST at match time: the decision to send and the
+/// record of owing it are the same write, so a crash between deciding and
+/// delivering loses nothing — the row is still there and the next drain finds
+/// it. Fire-and-forget would drop the signal silently, and on the outreach path
+/// a dropped `upgrade_gate_abandoned` is a lead nobody ever contacts.
+///
+/// `dedupeKey` is unique, which makes the INSERT itself the idempotency point:
+/// a replayed job derives the identical key, the insert conflicts, and nothing
+/// is queued twice. The same key goes to gtmsrv, so its dedupe index and this
+/// one agree on what "the same event" means.
+model SignalOutbox {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// The rule that matched. Nullable so a rule can be deleted without
+  /// destroying the record of what it already sent.
+  ruleId   String? @db.Uuid
+  ruleName String
+
+  /// Idempotency, shared with gtmsrv. Derived from the event's content, never
+  /// from a clock or a random source — see signal-rule.service.ts.
+  dedupeKey String @unique
+
+  kind     String
+  strength Int
+  source   String
+
+  /// Omitted entirely when the event has no identified profile. A guessed
+  /// subject attaches a stranger's activity to somebody else's timeline.
+  subjectKind String?
+  subjectId   String?
+
+  /// When the event happened, not when we heard. Sent as RFC 3339 so a delayed
+  /// delivery is dated correctly and SPEC §6's "4d after" counts from the event.
+  occurredAt DateTime
+
+  /// [IPrismaSignalOutboxEvidence]
+  evidence Json @default("{}")
+
+  /// pending | sent | failed | abandoned
+  status        String    @default("pending")
+  attempts      Int       @default(0)
+  lastError     String?
+  nextAttemptAt DateTime  @default(now())
+  sentAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  /// The drain's only query: pending work that is due.
+  @@index([status, nextAttemptAt])
+  @@index([projectId, createdAt])
+  @@map("signal_outbox")
+}
+
+// Per-organization DFS credentials. Org-level, not project-level, so one key
+// serves every site the org tracks. Encrypted with packages/db encryption.ts
+// exactly like GscConnection tokens.
+model DataForSeoConnection {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  apiKeyEnc      String       // base64(login:password), encrypted
+  login          String       // plain, for display
+  balanceUsd     Float?       // last seen from appendix/user_data
+  balanceAt      DateTime?
+  lastError      String?
+  monthlySpendUsd Float       @default(0) // rolling counter, reset by cron
+  spendCapUsd    Float?       // optional soft cap; jobs skip when exceeded
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @default(now()) @updatedAt
+  @@map("dataforseo_connections")
+}
+
+// Per-project SEO settings. Created lazily on first use of any SEO tab.
+model SeoProjectConfig {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId     String   @unique
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  domain        String   // "example.com" — derived from GscConnection.siteUrl if present, else user-entered
+  locationCode  Int      @default(2840)  // DFS location_code; 2376 = Israel
+  languageCode  String   @default("en")  // "he" for Hebrew
+  devices       String   @default("both") // both | desktop | mobile
+  serpDepth     Int      @default(20)
+  rankSchedule  String   @default("daily") // daily | weekly | manual
+  rankNextRunAt DateTime?
+  rankLastRunAt DateTime?
+  backlinkSchedule String @default("weekly")
+  backlinkNextRunAt DateTime?
+  competitors   String[] // domains
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now()) @updatedAt
+  @@map("seo_project_configs")
+}
+
+model SeoTrackedKeyword {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId     String
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  keyword       String
+  tags          String[]
+  source        String   @default("manual") // manual | gsc | research
+  searchVolume  Int?
+  difficulty    Int?
+  cpc           Float?
+  metricsAt     DateTime?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  @@unique([projectId, keyword])
+  @@index([projectId, isActive])
+  @@map("seo_tracked_keywords")
+}
+
+model SeoRankRun {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  status          String   // pending | running | completed | failed
+  keywordsTotal   Int      @default(0)
+  keywordsChecked Int      @default(0)
+  costUsd         Float    @default(0)
+  error           String?
+  startedAt       DateTime @default(now())
+  completedAt     DateTime?
+  @@index([projectId, startedAt])
+  @@map("seo_rank_runs")
+}
+
+model SeoAudit {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  dfsTaskId    String?  // on_page task id
+  status       String   // queued | crawling | completed | failed
+  maxPages     Int      @default(500)
+  pagesCrawled Int      @default(0)
+  score        Int?     // onpage_score
+  summary      Json?    // on_page/summary result (issue counts etc.)
+  costUsd      Float    @default(0)
+  error        String?
+  startedAt    DateTime @default(now())
+  completedAt  DateTime?
+  @@index([projectId, startedAt])
+  @@map("seo_audits")
 }

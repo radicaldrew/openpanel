@@ -560,6 +560,62 @@ Secret for signing Slack OAuth state parameter.
 SLACK_STATE_SECRET=your-state-secret
 ```
 
+## SEO (DataForSEO)
+
+The SEO tabs (keyword research, rank tracking, backlinks, site audits, AI visibility) call DataForSEO with a key each organization adds under **Settings → DataForSEO**. These variables tune that; none are needed for Search Console alone.
+
+### ENCRYPTION_KEY
+
+**Type**: `string`
+**Required**: Yes, for Search Console and DataForSEO
+**Default**: None
+
+32-byte key as a 64-character hex string. Search Console tokens and DataForSEO credentials are encrypted at rest with it; rotating it invalidates the stored ones.
+
+**Example**:
+```bash
+ENCRYPTION_KEY=$(openssl rand -hex 32)
+```
+
+### DATAFORSEO_DEFAULT_KEY
+
+**Type**: `string`
+**Required**: No
+**Default**: None
+
+A DataForSEO key used for organizations that have not added their own. Handy for a single-tenant self-hosted install. Accepts either the base64 form DataForSEO shows (`base64(login:password)`) or the raw `login:password`. Organizations on the default key have no spend cap and their spend is not tracked per organization.
+
+**Example**:
+```bash
+DATAFORSEO_DEFAULT_KEY=you@example.com:your-api-password
+```
+
+### SEO_RANK_TASK_PRIORITY
+
+**Type**: `number`
+**Required**: No
+**Default**: `1`
+
+Priority for queued rank-check tasks. `1` is DataForSEO's standard queue; `2` is high priority, which returns faster and costs twice as much per task.
+
+**Example**:
+```bash
+SEO_RANK_TASK_PRIORITY=1
+```
+
+### SEO_AUDIT_MAX_PAGES_DEFAULT
+
+**Type**: `number`
+**Required**: No
+**Default**: `500`
+
+Default value of the *Maximum pages* selector in the *Run audit* dialog. Clamped to 10–10000.
+
+**Example**:
+```bash
+SEO_AUDIT_MAX_PAGES_DEFAULT=500
+```
+
 ## Self-hosting
 
 ### SELF_HOSTED

@@ -1,0 +1,60 @@
+---
+title: "Connect DataForSEO"
+description: "Keyword research, rank tracking, backlinks, site audits and AI visibility in OpenPanel run on a DataForSEO account. This page explains what the key is, how spend is tracked and capped, and how each project is configured."
+date: 2026-09-07
+---
+
+## What DataForSEO adds
+
+Search Console shows you what Google already sent your way. DataForSEO fills in the rest of the SEO tab: search volume and difficulty for any keyword, where you rank for the keywords you track, who links to you, a technical crawl of your site, and whether AI assistants mention you.
+
+DataForSEO is a paid, pay-as-you-go API. OpenPanel calls it on your behalf with your own account, so you pay DataForSEO directly and OpenPanel never marks the price up. Every call is cached, and anything that runs on a schedule checks your spend cap first.
+
+## Add your key
+
+1. Create an account at [dataforseo.com](https://dataforseo.com) and add some credit.
+2. In OpenPanel open **Settings → DataForSEO**.
+3. Enter your **API login** and **API password** (from the DataForSEO dashboard, *API Access*) and save.
+
+OpenPanel checks the credentials against DataForSEO before storing them, so a typo never replaces a working key. The key is encrypted at rest.
+
+<Callout>The key is **shared by every project in the organization**. Only organization admins can add, replace or remove it, or change the spend cap.</Callout>
+
+## Balance and spend
+
+The settings page shows:
+
+- **Balance** — what is left on your DataForSEO account. It refreshes once a day, and you can refresh it by hand after topping up.
+- **Spent this month** — everything OpenPanel has charged to this key since the first of the month, across all projects.
+- **Monthly spend cap** — optional. When the month's spend reaches the cap, scheduled rank checks, backlink snapshots and audits stop starting and show *spend cap reached* instead. Interactive work such as keyword research and backlink lists keeps going, because those are cached and you are the one clicking. Leave the field empty for no cap.
+
+## Per-project configuration
+
+Below the key, each project has its own **This project** block. The same form appears inline the first time you open any SEO tab.
+
+| Setting | What it does |
+|---|---|
+| **Domain** | The site you track, as a bare domain such as `example.com`. Prefilled from your Search Console property when one is connected. |
+| **Location** | The country DataForSEO searches from. It affects rankings, volume and difficulty. |
+| **Language** | The search language, for example `en` or `he`. |
+| **Devices** | Rank checks run on desktop, mobile, or both. *Both* doubles the number of checks. |
+| **SERP depth** | How far down the results a rank check looks, 10 to 100. Deeper checks cost more; a keyword outside the depth shows as not ranked. |
+| **Rank schedule** | Daily, weekly or manual. Daily and weekly runs happen automatically; manual means only when you click *Check now*. |
+| **Backlink schedule** | Same choices for the backlink snapshot that feeds the Backlinks tab's history chart. |
+| **Competitors** | Up to ten domains. They appear in the Rankings competitor view, the Backlinks target switcher, the Keywords *ranked keywords* source and AI share of voice. |
+
+Changing a schedule takes effect on the next scheduler tick (within 15 minutes for rank checks).
+
+## What things cost, roughly
+
+Exact prices are on [DataForSEO's pricing page](https://dataforseo.com/pricing) and change over time. As a guide to what is expensive and what is not:
+
+- **Keyword research** (ideas, suggestions, related, volume and difficulty) is charged per request, not per keyword, and each request is remembered for 24 hours.
+- **Rank checks** are charged per keyword per device. Scheduled runs use DataForSEO's queued mode, which costs roughly a third of the live price; a *Check now* on ten keywords or fewer uses live results.
+- **SERP previews** and **backlink lists** are cached for six hours, so paging or reopening the same view is free.
+- **Site audits** are charged per crawled page. The *Run audit* dialog shows an estimate before you start; rendering JavaScript roughly quadruples it.
+- **Lighthouse** and **AI visibility** calls are cached for 24 hours.
+
+## Removing the key
+
+**Remove** deletes the stored key. Tracked keywords, rankings history, audits and backlink snapshots stay in OpenPanel; the SEO tabs simply show the *Connect DataForSEO* prompt until a key is added again.

@@ -2,6 +2,14 @@
   "title": "Dashboard",
   "pages": [
     "understand-the-overview",
+    "notifications-and-integrations",
+    "seo-dataforseo-settings",
+    "seo-search-console",
+    "seo-keywords",
+    "seo-rankings",
+    "seo-backlinks",
+    "seo-site-audit",
+    "seo-ai-visibility",
     "..."
   ]
 }

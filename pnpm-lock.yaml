@@ -1012,6 +1012,9 @@ importers:
       '@openpanel/common':
         specifier: workspace:*
         version: link:../../packages/common
+      '@openpanel/dataforseo':
+        specifier: workspace:*
+        version: link:../../packages/dataforseo
       '@openpanel/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -1260,6 +1263,22 @@ importers:
         specifier: 'catalog:'
         version: 5.9.3
 
+  packages/dataforseo:
+    dependencies:
+      zod:
+        specifier: 'catalog:'
+        version: 4.3.6
+    devDependencies:
+      '@openpanel/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/typescript
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.10.1
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   packages/db:
     dependencies:
       '@clickhouse/client':
@@ -1271,6 +1290,9 @@ importers:
       '@openpanel/constants':
         specifier: workspace:*
         version: link:../constants
+      '@openpanel/dataforseo':
+        specifier: workspace:*
+        version: link:../dataforseo
       '@openpanel/gigapipe':
         specifier: workspace:*
         version: link:../gigapipe
@@ -1598,6 +1620,9 @@ importers:
       '@openpanel/logger':
         specifier: workspace:*
         version: link:../logger
+      '@openpanel/queue':
+        specifier: workspace:*
+        version: link:../queue
       '@openpanel/redis':
         specifier: workspace:*
         version: link:../redis
@@ -1927,6 +1952,9 @@ importers:
       '@openpanel/constants':
         specifier: workspace:*
         version: link:../constants
+      '@openpanel/dataforseo':
+        specifier: workspace:*
+        version: link:../dataforseo
       '@openpanel/db':
         specifier: workspace:*
         version: link:../db

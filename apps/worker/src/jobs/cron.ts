@@ -12,16 +12,25 @@ import { cohortRefreshCronJob } from './cron.cohort-refresh';
 import { dataHealthCronJob } from './cron.data-health';
 import { jobDelete } from './cron.delete';
 import { insightCleanupCronJob } from './cron.insight-cleanup';
-import { weeklyDigestCronJob } from './cron.weekly-digest';
-import { windDownCronJob } from './cron.wind-down';
+import { measureSignalsCronJob } from './cron.measure-signals';
+import { metricAlertsCronJob } from './cron.metric-alerts';
 import { onboardingJob } from './cron.onboarding';
 import { ping } from './cron.ping';
 import { salt } from './cron.salt';
 import { sessionReaperCronJob } from './cron.session-reaper';
 import { sessionVacuumCronJob } from './cron.session-vacuum';
+import { signalOutboxCronJob } from './cron.signal-outbox';
+import { weeklyDigestCronJob } from './cron.weekly-digest';
+import { windDownCronJob } from './cron.wind-down';
 import { gscSyncAllJob } from './gsc';
 import { insightsDailyJob } from './insights';
-import { metricAlertsCronJob } from './cron.metric-alerts';
+import {
+  seoBacklinkSchedulerJob,
+  seoBalanceRefreshJob,
+  seoMetricsRefreshJob,
+  seoRankSchedulerJob,
+  seoSpendResetJob,
+} from './seo.cron';
 import { logger } from '@/utils/logger';
 
 export async function cronJob(job: Job<CronQueuePayload>) {
@@ -30,8 +39,14 @@ export async function cronJob(job: Job<CronQueuePayload>) {
     case 'salt': {
       return await salt();
     }
+    case 'signalOutbox': {
+      return signalOutboxCronJob();
+    }
     case 'metricAlerts': {
       return await metricAlertsCronJob();
+    }
+    case 'measureSignals': {
+      return await measureSignalsCronJob();
     }
     case 'flushEvents': {
       return await eventBuffer.tryFlush({ trigger: 'cron' });
@@ -65,6 +80,21 @@ export async function cronJob(job: Job<CronQueuePayload>) {
     }
     case 'gscSync': {
       return await gscSyncAllJob();
+    }
+    case 'seoRankScheduler': {
+      return await seoRankSchedulerJob();
+    }
+    case 'seoBacklinkScheduler': {
+      return await seoBacklinkSchedulerJob();
+    }
+    case 'seoSpendReset': {
+      return await seoSpendResetJob();
+    }
+    case 'seoBalanceRefresh': {
+      return await seoBalanceRefreshJob();
+    }
+    case 'seoMetricsRefresh': {
+      return await seoMetricsRefreshJob();
     }
     case 'cohortRefresh': {
       return await cohortRefreshCronJob();

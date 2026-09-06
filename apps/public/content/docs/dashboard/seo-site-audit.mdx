@@ -1,0 +1,35 @@
+---
+title: "Site audit"
+description: "The Site Audit tab crawls your site through DataForSEO and reports technical issues page by page: missing or duplicate titles, thin content, broken links, redirects, non-indexable pages, slow pages and more, grouped by severity with an overall score."
+date: 2026-09-07
+---
+
+## Run an audit
+
+Click **Run audit**. The dialog asks for:
+
+- **Maximum pages** — how many pages to crawl. The default comes from your deployment (500 unless configured otherwise) and the cap is 10,000.
+- **Render JavaScript** — crawl with a browser so client-rendered content is seen. It costs roughly four times as much per page.
+
+The **estimated cost** updates as you change these. What DataForSEO actually charges is shown on the audit once it starts.
+
+One audit per project runs at a time. The list refreshes every ten seconds while an audit is crawling, showing pages crawled so far. Most crawls finish within minutes; an audit that has not finished after three hours is marked failed.
+
+**Cancel** stops OpenPanel from waiting for the crawl and discards the pages collected so far. The crawl already posted to DataForSEO cannot be refunded.
+
+## The audit page
+
+Open a completed audit to see:
+
+- The **score**, DataForSEO's 0–100 on-page score for the site, with the count of pages crawled and the cost.
+- Issue totals by severity: **critical**, **warning** and **info**.
+- The **issue list** on the left. Each issue has a label, a description and how many pages it affects. Click one to filter the page table to those pages.
+- The **page table** on the right: URL, score, status code, word count, load time and the issues found on that page. Sort by score, URL, status, words or load time; the table loads more as you scroll.
+
+Click a page to open its details: title, meta description, H1, canonical, indexability, internal and external link counts, and every check that failed, each with a short explanation of how to fix it.
+
+## Lighthouse
+
+From the page sheet you can **Run Lighthouse** for that URL on mobile or desktop. It is a live call, so it is billed, and the result is cached for 24 hours. Lighthouse only runs against pages on the project's domain.
+
+<Callout>Audits are snapshots. Run one after a release, fix what it finds, and run another to confirm; the list keeps every audit so you can compare scores over time.</Callout>

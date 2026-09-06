@@ -1,0 +1,37 @@
+---
+title: "Backlinks"
+description: "The Backlinks tab shows who links to your site and how that changes over time: totals, referring domains, domain rank and spam score, a history chart, and filterable tables of backlinks, referring domains and your most-linked pages. Switch the target to a competitor to see the same for them."
+date: 2026-09-07
+---
+
+## Cards
+
+The top row shows, for the selected target:
+
+| Card | Meaning |
+|---|---|
+| **Backlinks** | Total live links pointing at the domain. |
+| **Referring domains** | Distinct sites those links come from. |
+| **Domain rank** | DataForSEO's authority score for the domain; higher is better. |
+| **Spam score** | 0–100; higher means more of the linking sites look spammy. |
+| **New / lost (30 days)** | Links gained and lost over the last month, from the history. |
+
+For your own domain the numbers come from a stored **snapshot**. A snapshot is taken on the **backlink schedule** in Settings → DataForSEO (weekly by default) and whenever you click **Snapshot now**. If the stored snapshot is older than a day when you open the tab, OpenPanel refreshes it for you, provided you can edit the project.
+
+## History
+
+The chart plots the snapshots over the selected range: backlinks and referring domains, with new and lost links per day. The longer snapshots have been running, the longer the series.
+
+## Tables
+
+Three tabs, each paginated 50 at a time and cached for six hours:
+
+- **Backlinks** — the linking page, anchor text, dofollow or nofollow, link type, ranks of the linking page and domain, spam score, first seen and, for lost links, when they were lost.
+- **Referring domains** — one row per linking site with its backlink count, referring pages, rank, spam score and first seen.
+- **Top pages** — your pages with the most backlinks and referring domains.
+
+Filters: **dofollow / nofollow**, **status** (live, new, lost, or all), a **minimum rank**, a search box, and **hide spam** to drop links with a spam score above 40. Sort by any numeric column.
+
+## Targets
+
+The domain switcher offers your own domain and every competitor from **Settings → DataForSEO**. A competitor's cards and history are fetched live (and cached for six hours) rather than stored, so there is no *Snapshot now* for them. Domains outside that list cannot be looked up, which keeps one project from spending the organization's balance on arbitrary sites.

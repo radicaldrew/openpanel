@@ -14,6 +14,7 @@
     "lint": "biome lint",
     "check": "biome check",
     "typecheck": "tsc --noEmit",
+    "test": "NITRO=1 vitest run",
     "with-env": "dotenv -e ../../.env -c --"
   },
   "dependencies": {

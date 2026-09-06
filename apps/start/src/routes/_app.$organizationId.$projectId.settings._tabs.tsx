@@ -47,6 +47,7 @@ function ProjectDashboard() {
     { id: 'widgets', label: 'Widgets' },
     { id: 'imports', label: 'Imports' },
     { id: 'gsc', label: 'Google Search' },
+    { id: 'dataforseo', label: 'DataForSEO' },
   ];
 
   const handleTabChange = (tabId: string) => {

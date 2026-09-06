@@ -10,6 +10,7 @@ import type {
   IWidgetOptions,
   InsightPayload,
 } from '@openpanel/validation';
+import type { IChartEventFilter } from '@openpanel/validation';
 import type {
   IClickhouseBotEvent,
   IClickhouseEvent,
@@ -29,6 +30,11 @@ declare global {
     type IPrismaWidgetOptions = IWidgetOptions;
     type IPrismaClickhouseEvent = IClickhouseEvent;
     type IPrismaClickhouseProfile = IClickhouseProfile;
+    // A signal rule's property filters, ANDed. The same shape charts and
+    // notification rules use, so matching goes through the one matchEvent().
+    type IPrismaSignalRuleFilters = IChartEventFilter[];
+    // Facts supporting a signal, passed to gtmsrv verbatim as `evidence`.
+    type IPrismaSignalOutboxEvidence = Record<string, unknown>;
     type IPrismaClickhouseBotEvent = IClickhouseBotEvent;
     type IPrismaCohortDefinition = CohortDefinition;
     // The structured metric query behind a `dataSource = metrics` report. The

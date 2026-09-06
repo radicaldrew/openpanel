@@ -16,6 +16,7 @@
     "@hyperdx/node-opentelemetry": "catalog:",
     "@openpanel/ai": "workspace:*",
     "@openpanel/common": "workspace:*",
+    "@openpanel/dataforseo": "workspace:*",
     "@openpanel/db": "workspace:*",
     "@openpanel/email": "workspace:*",
     "@openpanel/gigapipe": "workspace:*",
