@@ -40,6 +40,7 @@ COPY packages/importer/package.json ./packages/importer/
 COPY packages/payments/package.json ./packages/payments/
 COPY packages/constants/package.json ./packages/constants/
 COPY packages/gigapipe/package.json ./packages/gigapipe/
+COPY packages/dataforseo/package.json ./packages/dataforseo/
 COPY packages/validation/package.json ./packages/validation/
 COPY packages/integrations/package.json ./packages/integrations/
 COPY packages/js-runtime/package.json ./packages/js-runtime/
@@ -93,6 +94,7 @@ COPY --from=build /app/packages/importer ./packages/importer
 COPY --from=build /app/packages/payments ./packages/payments
 COPY --from=build /app/packages/constants ./packages/constants
 COPY --from=build /app/packages/gigapipe ./packages/gigapipe
+COPY --from=build /app/packages/dataforseo ./packages/dataforseo
 COPY --from=build /app/packages/validation ./packages/validation
 COPY --from=build /app/packages/integrations ./packages/integrations
 COPY --from=build /app/packages/js-runtime ./packages/js-runtime

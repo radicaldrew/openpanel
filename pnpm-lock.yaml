@@ -1084,6 +1084,9 @@ importers:
       uuid:
         specifier: ^9.0.1
         version: 9.0.1
+      zod:
+        specifier: 'catalog:'
+        version: 4.3.6
     devDependencies:
       '@openpanel/tsconfig':
         specifier: workspace:*
