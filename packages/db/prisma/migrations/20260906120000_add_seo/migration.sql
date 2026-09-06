@@ -118,13 +118,3 @@ ALTER TABLE "seo_rank_runs" ADD CONSTRAINT "seo_rank_runs_projectId_fkey" FOREIG
 
 -- AddForeignKey
 ALTER TABLE "seo_audits" ADD CONSTRAINT "seo_audits_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "projects"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-┌─────────────────────────────────────────────────────────┐
-│  Update available 6.14.0 -> 8.0.0-rc.13                 │
-│                                                         │
-│  This is a major update - please follow the guide at    │
-│  https://pris.ly/d/major-version-upgrade                │
-│                                                         │
-│  Run the following to update                            │
-│    npm i --save-dev prisma@latest                       │
-│    npm i @prisma/client@latest                          │
-└─────────────────────────────────────────────────────────┘
