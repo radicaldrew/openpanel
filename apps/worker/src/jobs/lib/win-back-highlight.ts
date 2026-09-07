@@ -1,6 +1,6 @@
 import { generateWinBackPitch } from '@openpanel/ai';
 import { getAnalyticsOverviewCore, getTopPagesCore } from '@openpanel/db';
-import { format, subDays } from 'date-fns';
+import { format, parseISO, subDays } from 'date-fns';
 import { logger } from '../../utils/logger';
 
 /**
@@ -72,7 +72,11 @@ async function collectFacts(
       (!busiestDay || row.unique_visitors > busiestDay.visitors)
     ) {
       busiestDay = {
-        date: format(new Date(row.date), 'MMMM d'),
+        // `row.date` is a date-only string (`2026-08-12`). `new Date()` reads that
+        // as UTC midnight and `format` renders it in local time, so on any
+        // server west of UTC the busiest day comes out one day early.
+        // `parseISO` reads a date-only string as a local calendar day.
+        date: format(parseISO(row.date), 'MMMM d'),
         visitors: row.unique_visitors,
       };
     }

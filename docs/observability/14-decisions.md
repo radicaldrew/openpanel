@@ -860,6 +860,55 @@ returns the series; the same raw query under another project returns `[]`.
 
 ---
 
+## D17 — Two P6 decisions are reversed by the PromQL panel build · SETTLED
+
+The multi-query panel work (see **[15 — PromQL panels](./15-promql-panels.md)**,
+built 2026-09-07) reverses two decisions recorded above. Both are reversed
+deliberately, and neither loosens the tenancy boundary.
+
+**Raw PromQL reaches the UI.** P6 shipped `rewritePromqlForProject` and exposed
+it as `observability.rawQuery`, which no UI ever called — the sanctioned
+position was "structured queries only". A panel now sends `expr` as the source
+of truth, typed by hand or compiled from the builder, and the rewriter is the
+gate rather than an unused safety net.
+
+**`observability.rawQuery` has been DELETED.** `panel` supersedes it, nothing
+called it, and it was the only read path that returned a gigapipe response
+without going through the adapter's `assertOwnedBy`. That last part is what
+made it worth removing rather than leaving: a response carrying a forged
+`op_project_id` is caught on the panel path and dropped, and was not caught
+there. Every raw-PromQL read now goes through `executeMetricPanel`.
+
+What changed to make raw PromQL safe is that the rewriter now carries the
+tenancy label *through aggregation*: it appends `op_project_id` to every
+`by (…)` list, adds `by (op_project_id)` to a bare aggregation, and rejects
+`without (op_project_id)`. Without that, `sum by (method) (…)` discarded the
+label and the response-side ownership check in `adaptMatrixToConcreteSeries`
+had nothing to verify — the check was vacuous for exactly the queries people
+write most. `count_values` joins `label_replace` and `label_join` on the
+rejected list: it can invent the label from a sample value.
+
+All three are rejected by **grammar node**, not by matching the query text. The
+text form was a word-boundary regex, and `\s*` does not span a comment, so
+`label_replace # x\n(…)` passed it, parsed, and was forwarded. For the same
+reason `assertPromqlScoped` reads the matcher nodes rather than testing for the
+matcher's text: PromQL has two string forms in which a bare `"` is legal, so
+`up{job='op_project_id="p"'}` satisfied a substring check while carrying no
+tenancy matcher at all.
+
+**The explorer is multi-query.** Doc 09 D13 specified a single-query explorer.
+Explore is now the same `QueryRows` component as the report editor, because the
+question that sends someone to an explorer — "is this spike the same shape as
+that one" — needs two lines on one chart, and a single-query explorer forces
+them to answer it by flipping between two runs.
+
+Everything else in P6 stands. `MetricQueryEditor` and the structured
+`compileMetricQuery` path are untouched and still serve the alert cron, the MCP
+telemetry tool and the chat agent; the legacy `metricQuery` column is still read
+as a fallback for reports saved before panels existed.
+
+---
+
 ## Test coverage so far
 
 | Suite | Tests |

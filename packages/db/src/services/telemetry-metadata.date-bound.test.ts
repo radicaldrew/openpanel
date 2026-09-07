@@ -91,11 +91,22 @@ const rows = () => {
 };
 
 beforeAll(async () => {
+  // Reachable is not enough: `time_series_gin` is gigapipe's table, not ours,
+  // so a ClickHouse without gigapipe (CI's service container) answers
+  // `SELECT 1` and then fails the insert with "table does not exist". Skip
+  // unless the table is actually there.
   try {
-    await ch().command({ query: 'SELECT 1' });
-    reachable = true;
+    const res = await ch().query({
+      query: `EXISTS TABLE ${TELEMETRY_DATABASE}.time_series_gin`,
+      format: 'JSONEachRow',
+    });
+    const [row] = await res.json<{ result: number }>();
+    reachable = Number(row?.result) === 1;
   } catch {
     reachable = false;
+  }
+
+  if (!reachable) {
     return;
   }
 
