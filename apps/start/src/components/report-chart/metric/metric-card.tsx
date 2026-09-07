@@ -1,10 +1,15 @@
-import { fancyMinutes, useNumber } from '@/hooks/use-numer-formatter';
+import {
+  fancyMinutes,
+  useNumber,
+  useUnitFormat,
+} from '@/hooks/use-numer-formatter';
 import type { IChartData } from '@/trpc/client';
 import { cn } from '@/utils/cn';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import { Area, AreaChart, Tooltip } from 'recharts';
 
-import type { IChartMetric } from '@openpanel/validation';
+import type { IChartMetric, IPromqlUnit } from '@openpanel/validation';
+import { lastValue } from '../common/series-units';
 
 import {
   ChartTooltipContainer,
@@ -27,8 +32,12 @@ interface MetricCardProps {
   unit?: string;
 }
 
-const TooltipContent = (props: { payload?: any[] }) => {
+const TooltipContent = (props: {
+  payload?: any[];
+  unit?: IPromqlUnit;
+}) => {
   const number = useNumber();
+  const unitFormat = useUnitFormat();
   return (
     <ChartTooltipContainer>
       {props.payload?.map((item) => {
@@ -39,7 +48,9 @@ const TooltipContent = (props: { payload?: any[] }) => {
               <div>{formatDate(new Date(date))}</div>
             </ChartTooltipHeader>
             <ChartTooltipItem color={getChartColor(0)}>
-              <div>{number.format(count)}</div>
+              <div>
+                {props.unit ? unitFormat.full(count, props.unit) : number.format(count)}
+              </div>
             </ChartTooltipItem>
           </div>
         );
@@ -56,6 +67,19 @@ export function MetricCard({
 }: MetricCardProps) {
   const { isEditMode } = useReportChartContext();
   const number = useNumber();
+  const unitFormat = useUnitFormat();
+
+  /**
+   * A stat card answers "what is it right now".
+   *
+   * For a metrics panel that is the LAST point, not the report's aggregation:
+   * the sum of every p95 sample in a window is not a latency, and an `instant`
+   * query returns a single point that is both the last one and the only one.
+   * An events report keeps `report.metric` — its cards have always shown the
+   * chosen aggregation and nothing about that changes.
+   */
+  const panelUnit = serie.panel?.unit;
+  const value = serie.panel ? lastValue(serie) : serie.metrics[metric];
 
   const renderValue = (value: number | undefined, unitClassName?: string) => {
     // A genuine 0 is a real value, not a missing one — `min` is 0 whenever the
@@ -64,6 +88,12 @@ export function MetricCard({
     // really is undefined for bar/pie series.
     if (value === undefined || value === null) {
       return <div className="text-muted-foreground">N/A</div>;
+    }
+
+    // A typed panel unit already carries its own suffix — `34 ms`, `3 GiB` —
+    // so it must not also get the legacy free-string appended after it.
+    if (panelUnit) {
+      return <>{unitFormat.full(value, panelUnit)}</>;
     }
 
     if (unit === 'min') {
@@ -125,7 +155,11 @@ export function MetricCard({
                   />
                 </linearGradient>
               </defs>
-              <Tooltip content={TooltipContent} />
+              <Tooltip
+                content={(tooltipProps) => (
+                  <TooltipContent {...tooltipProps} unit={panelUnit} />
+                )}
+              />
               <Area
                 dataKey="count"
                 type="step"
@@ -141,7 +175,7 @@ export function MetricCard({
       </div>
       <MetricCardNumber
         label={<SerieName name={serie.names} />}
-        value={renderValue(serie.metrics[metric], 'ml-1 font-light text-xl')}
+        value={renderValue(value, 'ml-1 font-light text-xl')}
         enhancer={
           <PreviousDiffIndicator
             {...previous}

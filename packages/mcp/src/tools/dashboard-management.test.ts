@@ -535,7 +535,7 @@ describe('dashboard management behavior', () => {
         dashboardId: 'dashboard-1',
         report: validReport({ dataSource: 'metrics' }),
       }),
-    ).rejects.toThrow('A metrics report needs a metricQuery');
+    ).rejects.toThrow('A metrics report needs at least one metric query');
 
     expect(mockDb.report.create).not.toHaveBeenCalled();
   });

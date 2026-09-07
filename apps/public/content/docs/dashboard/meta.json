@@ -10,6 +10,10 @@
     "seo-backlinks",
     "seo-site-audit",
     "seo-ai-visibility",
+    "metrics-panels",
+    "dashboard-variables",
+    "metrics-explore",
+    "annotations",
     "..."
   ]
 }

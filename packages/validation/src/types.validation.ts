@@ -15,6 +15,7 @@ import type {
   zCriteria,
   zLineType,
   zMetric,
+  zPromqlUnit,
   zRange,
   zReport,
   zReportInput,
@@ -95,6 +96,21 @@ export type Metrics = {
   };
 };
 
+/**
+ * Per-series panel metadata, carried from the query that produced the series.
+ *
+ * Only a metrics panel has this: an events series comes from a `series[]`
+ * entry, which has no unit and no axis of its own. It is what lets one chart
+ * draw a request rate on the left axis in ops and a p95 on the right in
+ * seconds — the renderer cannot ask the report for it, because a panel with
+ * two queries has two different answers.
+ */
+export interface IChartSeriePanel {
+  refId: string;
+  unit: z.infer<typeof zPromqlUnit>;
+  yAxis: 'left' | 'right';
+}
+
 export type IChartSerie = {
   id: string;
   names: string[];
@@ -109,6 +125,12 @@ export type IChartSerie = {
     count: number;
     previous: PreviousValue;
   }[];
+  /**
+   * Present only on metrics panels — set by
+   * `packages/db/src/engine/metrics/panel.ts`. Optional so every existing
+   * producer and consumer of a series is unaffected.
+   */
+  panel?: IChartSeriePanel;
 };
 
 export type FinalChart = {

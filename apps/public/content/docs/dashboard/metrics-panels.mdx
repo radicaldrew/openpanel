@@ -1,0 +1,95 @@
+---
+title: "Metric panels"
+description: "A metric panel runs one or more PromQL queries against your server telemetry. Build a query with the visual builder or write it directly, give each query its own unit and axis, and combine several on one chart."
+date: 2026-09-07
+---
+
+A report whose data source is **Metrics** charts your server telemetry rather than your product events. Each panel holds up to ten queries, labelled **A**, **B**, **C** and so on, and they all draw on the same chart.
+
+## Builder or Code
+
+Every query row has two tabs.
+
+**Builder** is a pipeline: pick a metric, add label filters, then stack operations — rate, sum by, histogram quantile, top-k. Each step feeds the next, so `rate` → `sum by (le)` → `histogram_quantile(0.95)` is a p95. The compiled PromQL is shown read-only underneath, so the builder teaches the query language rather than hiding it.
+
+**Code** is the same query as text, with autocomplete over your own metric and label names, and syntax errors underlined before you run anything.
+
+The two tabs are the same query. Switching from Builder to Code always works. Switching back only works if the expression is something the builder can represent — the **Builder** tab is disabled, with the tooltip *"This query is too complex for the builder — edit it in code"*, for expressions like binary operations between two selectors or nested subqueries. Nothing is lost when that happens; the query still runs.
+
+<Callout>Picking a metric seeds sensible operations for its kind. A `_total` counter gets `rate` and `sum`; a `_bucket` histogram gets the full quantile pipeline; a gauge gets neither, because a gauge's rate is zero whenever the gauge is steady.</Callout>
+
+## Query patterns
+
+The **Query patterns** dropdown beside the query rows fills in a shape around the metric you have chosen:
+
+| Pattern | What it draws |
+|---|---|
+| **Request rate** | Per-second rate of a counter |
+| **Request rate by service** | The same, split by `service_name` |
+| **Error rate** | Rate of series whose `status` matches `5..` |
+| **p50 / p95 / p99 latency** | A quantile over rated histogram buckets |
+| **Saturation** | The maximum value per service — for gauges like queue depth |
+| **Top 5 series** | The five busiest series only |
+| **Increase per interval** | How much a counter grew in each bucket, rather than its rate |
+
+The error-rate pattern assumes your instrumentation uses a `status` label; change the matcher if it does not. **Top 5 series** is re-ranked at every point on the chart, so a line appearing or disappearing part-way across means its rank changed, not that data is missing.
+
+## Rate windows and `$__rate_interval`
+
+A counter only ever climbs, so charting it raw draws a line that goes up and tells you nothing. `rate()` turns it into a per-second slope, which is the number you meant.
+
+The window matters. A rate window narrower than about four times the chart's step samples the gaps between buckets and draws a sawtooth that reads as real instability. Rather than picking a window by hand, use **`$__rate_interval`**: the server resolves it against the step the chart is actually drawn at, so it can never be too narrow, and it follows the chart when you change the range or interval.
+
+Three built-ins are resolved against the chart's own step and window:
+
+| Variable | Resolves to |
+|---|---|
+| `$__interval` | The step the chart is drawn at, for example `1h` |
+| `$__rate_interval` | `max(4 × step, 4 × scrape)`, never below 60s |
+| `$__range` | The whole window being charted, for example `1d` |
+
+## Units and the right axis
+
+Each query has its own **unit**, so a request rate and a p95 latency can share one chart and each read correctly.
+
+| Unit | Input | Renders as |
+|---|---|---|
+| None | any number | `1,234.5` |
+| Short (k, M, B) | any number | `1.5 K`, `2.5 M` |
+| Ops/sec | a per-second rate | `12.35 ops/s` |
+| Seconds | seconds | `34 ms`, `1.5 s`, `2 h` |
+| Milliseconds | milliseconds | `500 µs`, `1.5 s` |
+| Bytes | bytes | `2 KiB`, `3 GiB` |
+| Percent (0–100) | already a percentage | `42.5%` |
+| Percent (0–1) | a ratio | `50%` |
+
+<Callout type="warn">**Percent (0–1)** is what a PromQL division gives you — `errors / total` produces `0.05`, which is 5%. **Percent (0–100)** is for a metric that already counts in percent. Choosing the wrong one is a factor of 100.</Callout>
+
+Set a query's **Y axis** to **Right** when its values live on a different scale from the rest — a rate in the thousands beside a latency in milliseconds. The second axis appears as soon as any visible query asks for it.
+
+The table under the chart adapts too: when none of the visible queries is additive, the **Sum** column is replaced by **Last**, because the total of every p95 sample in a window is not a latency anyone can act on.
+
+## The other per-query options
+
+- **Legend** names the series. `{{method}} {{status}}` substitutes those labels per series; leave it empty to show the labels as they come back.
+- **Hide** keeps a query in the panel without drawing it — useful for one half of a ratio you are still working on.
+- **Min step** puts a floor under the chart's step for that query, for a metric scraped less often than the others.
+- **Instant** (stat panels only) returns a single current value rather than a series.
+
+## When a query fails
+
+If any query in a panel fails, the whole panel shows the error — `Query B: <message from the server>` — with a link to open the report and fix it. Panels are never half-drawn: a chart missing one of its three queries looks like a chart, and would be read as one.
+
+## From a panel to the logs behind it
+
+Clicking a point on a line, area or histogram panel offers **View logs for this range** and **View traces for this range**, which open a window around the bucket you clicked. See [Explore](/docs/dashboard/metrics-explore#from-a-spike-to-the-logs-behind-it) for what range and service they carry. A stat panel has no points to click, so it has no menu.
+
+## What you never write
+
+You never write a project filter. The server parses every query with Prometheus's own grammar and adds your project to every selector before it runs, including inside `by (…)` groupings. Queries that try to remove it, or that use `label_replace`, `label_join` or `count_values`, are rejected — each of those can forge the label the isolation depends on.
+
+## Next
+
+- [Dashboard variables](/docs/dashboard/dashboard-variables) — drive several panels from one picker
+- [Explore](/docs/dashboard/metrics-explore) — an ad-hoc query workbench
+- [Annotations](/docs/dashboard/annotations) — mark deploys and incidents on your charts

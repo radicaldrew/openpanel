@@ -1,11 +1,11 @@
 import { useDebounceFn } from '@/hooks/use-debounce-fn';
 import { useFormatDateInterval } from '@/hooks/use-format-date-interval';
-import { useNumber } from '@/hooks/use-numer-formatter';
+import { useUnitFormat } from '@/hooks/use-numer-formatter';
 import { isNil } from 'ramda';
 import { useRef, useState } from 'react';
 import type { AxisDomain } from 'recharts/types/util/types';
 
-import type { IInterval } from '@openpanel/validation';
+import type { IInterval, IPromqlUnit } from '@openpanel/validation';
 export const AXIS_FONT_PROPS = {
   fontSize: 8,
   className: 'font-mono',
@@ -25,10 +25,20 @@ export const useYAxisProps = (options?: {
   hide?: boolean;
   tickFormatter?: (value: number) => string;
   width?: number;
+  /**
+   * The typed unit of the metrics queries drawn on this axis, when they all
+   * agree on one. Ticks are then scaled and suffixed — `34 ms`, `3 GiB` —
+   * instead of being rendered as a bare short number, which is the difference
+   * between an axis you can read a latency off and one you cannot.
+   *
+   * Undefined for an events report and for an axis whose series disagree, and
+   * the ticks then format exactly as they always have.
+   */
+  unit?: IPromqlUnit;
 }) => {
   const [width, setWidth] = useState(options?.width || 24);
   const setWidthDebounced = useDebounceFn(setWidth, 100);
-  const number = useNumber();
+  const unitFormat = useUnitFormat();
   const ref = useRef<number[]>([]);
 
   return {
@@ -36,11 +46,14 @@ export const useYAxisProps = (options?: {
     width: options?.hide ? 0 : width,
     axisLine: false,
     tickLine: false,
-    allowDecimals: false,
+    // A latency axis is all decimals below one second, so a metrics panel with
+    // a typed unit has to allow them. Events charts count things and keep the
+    // whole-number ticks they have always had.
+    allowDecimals: options?.unit !== undefined,
     tickFormatter: (value: number) => {
       const tick = options?.tickFormatter
         ? options.tickFormatter(value)
-        : number.short(value);
+        : unitFormat.tick(value, options?.unit);
       if(!options?.width) {
         const newWidth = getYAxisWidth(tick);
         ref.current.push(newWidth);

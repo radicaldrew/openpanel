@@ -48,28 +48,34 @@ export function ReportSaveButton({ className }: ReportSaveButtonProps) {
   const isLoading = update.isPending || fetching.some((f) => f !== 0);
 
   // `dirty` alone is not enough to mean saveable. Flipping the source picker to
-  // Metrics marks the report dirty immediately while leaving `metricQuery`
-  // undefined until a metric is chosen, so a bare `!report.dirty` lights the
-  // button up on a config the server will refuse: `refineReportDataSource`
-  // rejects `report.create`/`report.update` with "A metrics report needs a
-  // metricQuery", which reaches the user through `handleError` as an opaque
-  // validation toast — right next to the chart slot already saying "Pick a
-  // metric to chart it."
+  // Metrics marks the report dirty immediately while seeding a query row that
+  // has no metric in it yet, so a bare `!report.dirty` lights the button up on
+  // a config the server will refuse — and it refuses it through `handleError`
+  // as an opaque validation toast, right next to the chart slot already saying
+  // "Pick a metric to chart it."
   //
-  // Keyed on `.metric` rather than on the query as a whole because the query is
-  // reachable in a second unsaveable shape: the Function and Aggregation
-  // pickers stay enabled before a metric is picked and write back
-  // `emptyMetricQuery` with `metric: ''`, which satisfies the refinement (the
-  // query is present) but fails `zMetricQuery`'s `metric.min(1)` even less
-  // legibly. One guard covers both.
+  // Keyed on `expr` because that is the field the server validates:
+  // `zPanelQuery` requires `expr.min(1)`, so ONE half-built row fails the whole
+  // save even when the other rows are fine. The builder compiles to an empty
+  // string for as long as the metric is unpicked, which is most of the time a
+  // row spends being built.
   //
-  // The inverse half of the refinement — a `metricQuery` left on an events
-  // report — needs no guard here: `changeDataSource` moves the query to
-  // `stashedMetricQuery` on the way out and `changeMetricQuery` forces
-  // `dataSource` to 'metrics', so the editor cannot reach that state.
+  // A report saved before multi-query panels has no `metricQueries` at all and
+  // renders from the legacy `metricQuery`; renaming one has to stay saveable,
+  // so that column satisfies the check on its own.
+  //
+  // The inverse half of the refinement — metric queries left on an events
+  // report — needs no guard here: `changeDataSource` moves them to
+  // `stashedMetricQueries` on the way out, so the editor cannot reach that
+  // state.
+  const metricQueries = report.metricQueries ?? [];
+  const metricsSaveable =
+    metricQueries.length > 0
+      ? metricQueries.every((query) => query.expr.trim() !== '')
+      : !!report.metricQuery?.metric;
+
   const canSave =
-    report.dirty &&
-    !(report.dataSource === 'metrics' && !report.metricQuery?.metric);
+    report.dirty && (report.dataSource !== 'metrics' || metricsSaveable);
 
   if (reportId) {
     return (

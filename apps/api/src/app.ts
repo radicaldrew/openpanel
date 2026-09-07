@@ -57,6 +57,7 @@ import miscRouter from './routes/misc.router';
 import oauthRouter from './routes/oauth-callback.router';
 import profileRouter from './routes/profile.router';
 import toolsRouter from './routes/tools.router';
+import annotationsRouter from './routes/annotations.router';
 import telemetryRouter from './routes/telemetry.router';
 import trackRouter from './routes/track.router';
 import webhookRouter from './routes/webhook.router';
@@ -360,6 +361,7 @@ export async function buildApp(
           { name: 'Insights', description: 'Query analytics data' },
           { name: 'Manage', description: 'Manage projects and clients' },
           { name: 'Event', description: 'Legacy event ingestion (deprecated, use /track)' },
+          { name: 'Annotations', description: 'Mark deploys and incidents on metric charts' },
         ],
       },
       ...fastifyZodOpenApiTransformers,
@@ -385,6 +387,7 @@ export async function buildApp(
     instance.register(trackRouter, { prefix: '/track' });
     instance.register(manageRouter, { prefix: '/manage' });
     instance.register(toolsRouter, { prefix: '/tools' });
+    instance.register(annotationsRouter, { prefix: '/annotations' });
 
     instance.get('/healthcheck', { schema: { hide: true } }, healthcheck);
     instance.get('/healthz/live', { schema: { hide: true } }, liveness);

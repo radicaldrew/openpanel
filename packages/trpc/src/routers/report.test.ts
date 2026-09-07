@@ -86,6 +86,23 @@ const metricReport = {
   },
 };
 
+/** A metrics report on the new multi-query column. */
+const panelReport = {
+  ...baseReport,
+  dataSource: 'metrics' as const,
+  metricQueries: [
+    {
+      refId: 'A',
+      expr: 'sum by (method) (rate(http_requests_total[5m]))',
+      mode: 'code' as const,
+      hidden: false,
+      unit: 'ops' as const,
+      yAxis: 'left' as const,
+      instant: false,
+    },
+  ],
+};
+
 /** The `data` object handed to Prisma on call `n`. */
 const written = (spy: typeof reportCreate, n = 0) => spy.mock.calls[n]?.[0]?.data;
 
@@ -200,7 +217,7 @@ describe('the data source and the query have to agree', () => {
         report: { ...baseReport, dataSource: 'metrics' as const },
         dashboardId: 'dash_1',
       }),
-    ).rejects.toThrow(/metricQuery/i);
+    ).rejects.toThrow(/needs at least one metric query/i);
 
     expect(reportCreate).not.toHaveBeenCalled();
   });
@@ -246,8 +263,113 @@ describe('the data source and the query have to agree', () => {
         reportId: 'rep_1',
         report: { ...baseReport, dataSource: 'metrics' as const },
       }),
-    ).rejects.toThrow(/metricQuery/i);
+    ).rejects.toThrow(/needs at least one metric query/i);
 
     expect(reportUpdate).not.toHaveBeenCalled();
+  });
+
+  it('accepts a metrics report carrying only the new panel queries', async () => {
+    // The legacy `metricQuery` is a READ fallback, not a requirement: a panel
+    // authored in the new editor never has one.
+    await expect(
+      caller().create({ report: panelReport, dashboardId: 'dash_1' }),
+    ).resolves.toBeDefined();
+  });
+
+  it('refuses panel queries on an events report', async () => {
+    await expect(
+      caller().create({
+        report: { ...baseReport, metricQueries: panelReport.metricQueries },
+        dashboardId: 'dash_1',
+      }),
+    ).rejects.toThrow(/dataSource/i);
+
+    expect(reportCreate).not.toHaveBeenCalled();
+  });
+
+  it('does not mistake an empty query list for a metrics report', async () => {
+    // `metricQueries: []` is what an events report legitimately carries, so
+    // presence of the key must not count as "has queries" in either direction.
+    await expect(
+      caller().create({
+        report: { ...baseReport, metricQueries: [] },
+        dashboardId: 'dash_1',
+      }),
+    ).resolves.toBeDefined();
+
+    await expect(
+      caller().create({
+        report: { ...baseReport, dataSource: 'metrics' as const, metricQueries: [] },
+        dashboardId: 'dash_1',
+      }),
+    ).rejects.toThrow(/needs at least one metric query/i);
+  });
+});
+
+/**
+ * `metricQueries` is the column the multi-query editor writes; `metricQuery`
+ * stays only as a read fallback for rows saved before it. Both routes go
+ * through `reportWriteData`, and this is the same trap `dataSource` fell into:
+ * a dropped column stores a panel that renders nothing and reports no error.
+ */
+describe('a multi-query metric panel survives being saved', () => {
+  it('writes the panel queries on create', async () => {
+    await caller().create({ report: panelReport, dashboardId: 'dash_1' });
+
+    expect(written(reportCreate)).toMatchObject({
+      dataSource: 'metrics',
+      metricQueries: panelReport.metricQueries,
+    });
+  });
+
+  it('writes the panel queries on update', async () => {
+    await caller().update({ reportId: 'rep_1', report: panelReport });
+
+    expect(written(reportUpdate)).toMatchObject({
+      dataSource: 'metrics',
+      metricQueries: panelReport.metricQueries,
+    });
+  });
+
+  it('applies the per-query defaults on the way in', async () => {
+    // Only refId and expr are required of a caller; everything the renderer
+    // reads has to be present in the stored row or a saved panel would render
+    // differently from the one that was just previewed.
+    await caller().create({
+      report: {
+        ...baseReport,
+        dataSource: 'metrics' as const,
+        metricQueries: [{ refId: 'A', expr: 'up' }],
+      },
+      dashboardId: 'dash_1',
+    });
+
+    expect(written(reportCreate)?.metricQueries?.[0]).toEqual({
+      refId: 'A',
+      expr: 'up',
+      mode: 'code',
+      hidden: false,
+      unit: 'none',
+      yAxis: 'left',
+      instant: false,
+    });
+  });
+
+  it('clears the queries when a panel stops being a metric report', async () => {
+    // The empty array, not DbNull: the column is non-nullable with a `[]`
+    // default, so "no queries" is `[]`. Passing undefined would read to Prisma
+    // as "leave alone" and strand the queries on an events report.
+    await caller().update({ reportId: 'rep_1', report: baseReport });
+
+    expect(written(reportUpdate)?.metricQueries).toEqual([]);
+  });
+
+  it('still saves a legacy single-query metric report', async () => {
+    await caller().create({ report: metricReport, dashboardId: 'dash_1' });
+
+    expect(written(reportCreate)).toMatchObject({
+      metricQuery: metricReport.metricQuery,
+      metricQueries: [],
+    });
   });
 });

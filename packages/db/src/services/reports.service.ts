@@ -97,6 +97,11 @@ export function transformReport(
     // them.
     dataSource: report.dataSource,
     metricQuery: report.metricQuery ?? undefined,
+    // Reports saved before multi-query panels have `[]` here and a populated
+    // `metricQuery`; the engine prefers this list when it is non-empty and
+    // falls back to the legacy query otherwise. scripts/migrate-metric-panels.ts
+    // is what eventually empties the fallback.
+    metricQueries: report.metricQueries ?? [],
     chartType: report.chartType,
     lineType: (report.lineType as IChartLineType) ?? lineTypes.monotone,
     interval: report.interval,
@@ -261,6 +266,11 @@ export function reportWriteData(report: IReportWriteInput) {
     name: report.name,
     dataSource: report.dataSource ?? 'events',
     metricQuery: report.metricQuery ?? Prisma.DbNull,
+    // Not DbNull: the column is `Json @default("[]")` and non-nullable, so
+    // "no queries" is the empty array. Still written unconditionally, for the
+    // same reason as everything else here — converting a panel back to events
+    // has to clear it.
+    metricQueries: report.metricQueries ?? [],
     events: report.series,
     globalFilters: report.globalFilters ?? [],
     interval: report.interval,

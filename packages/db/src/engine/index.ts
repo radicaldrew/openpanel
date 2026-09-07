@@ -30,11 +30,33 @@ export async function executeChart(input: IReportInput): Promise<FinalChart> {
   // the same FinalChart, so every caller and every renderer downstream is
   // unaware there are two. See docs/observability/14-decisions.md.
   if (input.dataSource === 'metrics') {
+    const normalizedForDates = await normalize(input);
+
+    // A panel with PromQL queries takes the new path; anything else is a report
+    // saved before multi-query panels existed and still renders through the
+    // structured compiler. That fallback is the feature flag: new writes go to
+    // `metricQueries`, old rows keep working untouched until the migration has
+    // run against them.
+    if (input.metricQueries?.length) {
+      const { executeMetricPanel } = await import('./metrics/panel');
+
+      const { chart } = await executeMetricPanel({
+        projectId: input.projectId,
+        queries: input.metricQueries,
+        interval: normalizedForDates.interval,
+        startDate: normalizedForDates.startDate,
+        endDate: normalizedForDates.endDate,
+        previous: input.previous,
+        variables: input.variables,
+      });
+
+      return chart;
+    }
+
     if (!input.metricQuery) {
       throw new Error('A metrics report requires a metricQuery');
     }
 
-    const normalizedForDates = await normalize(input);
     const { executeMetricChart } = await import('./metrics');
 
     const { chart } = await executeMetricChart({

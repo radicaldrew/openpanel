@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GIGAPIPE_ERROR_STATUS_TOO_LARGE, GIGAPIPE_ROUTES, GigapipeError, queryRange } from './client';
+import { GIGAPIPE_ERROR_STATUS_TOO_LARGE, GIGAPIPE_ROUTES, GigapipeError, queryInstant, queryRange } from './client';
 
 /**
  * The route allowlist is a security control, not a convenience.
@@ -130,5 +130,107 @@ describe('queryRange response ceiling', () => {
 
     // Bounded: it stopped reading rather than draining an endless stream.
     expect(served).toBeLessThan(200);
+  });
+});
+
+/**
+ * The instant query is the stat panel's whole data path, so the things that
+ * matter are that it reaches the right route, sends the query in a body rather
+ * than a URL, and maps an over-limit failure the same way the range query does.
+ */
+describe('queryInstant', () => {
+  const config = {
+    url: 'http://gigapipe.test',
+    username: 'u',
+    password: 'p',
+  };
+
+  const params = {
+    promql: 'sum by (op_project_id)(up{op_project_id="proj_123"})',
+    time: new Date('2026-01-01T01:00:00Z'),
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function capture(response: Response) {
+    const calls: [string, RequestInit][] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string, init: RequestInit) => {
+        calls.push([url, init]);
+        return Promise.resolve(response);
+      }),
+    );
+    return calls;
+  }
+
+  it('posts the query as a form body to the instant route', async () => {
+    const calls = capture(
+      new Response(JSON.stringify({ status: 'success' }), { status: 200 }),
+    );
+
+    await queryInstant(params, config);
+
+    const [url, init] = calls[0] as [string, RequestInit];
+    expect(url).toBe(`http://gigapipe.test${GIGAPIPE_ROUTES.promQuery}`);
+    expect(init.method).toBe('POST');
+
+    // In the body, never the URL: a proxy that truncates a long URL would drop
+    // a trailing matcher and silently widen the selection.
+    const body = new URLSearchParams(init.body as string);
+    expect(body.get('query')).toBe(params.promql);
+    expect(body.get('time')).toBe('1767229200');
+    expect(url).not.toContain('up');
+  });
+
+  it('sends basic auth and copies no caller header through', async () => {
+    const calls = capture(
+      new Response(JSON.stringify({ status: 'success' }), { status: 200 }),
+    );
+
+    await queryInstant(params, config);
+
+    const headers = (calls[0] as [string, RequestInit])[1].headers as Record<
+      string,
+      string
+    >;
+    expect(headers.authorization).toBe(
+      `Basic ${Buffer.from('u:p', 'utf8').toString('base64')}`,
+    );
+    expect(Object.keys(headers).sort()).toEqual([
+      'authorization',
+      'content-type',
+    ]);
+  });
+
+  it('reports an over-limit failure as 413, so the UI narrows instead of retrying', async () => {
+    capture(new Response('too many samples in query', { status: 500 }));
+
+    await expect(queryInstant(params, config)).rejects.toMatchObject({
+      name: 'GigapipeError',
+      status: GIGAPIPE_ERROR_STATUS_TOO_LARGE,
+    });
+  });
+
+  it('passes an ordinary failure status through', async () => {
+    capture(new Response('nope', { status: 400 }));
+
+    await expect(queryInstant(params, config)).rejects.toMatchObject({
+      name: 'GigapipeError',
+      status: 400,
+    });
+  });
+
+  it('is a GigapipeError when the transport fails, not a bare fetch error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new Error('econnrefused'))),
+    );
+
+    await expect(queryInstant(params, config)).rejects.toBeInstanceOf(
+      GigapipeError,
+    );
   });
 });

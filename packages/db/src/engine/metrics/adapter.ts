@@ -1,3 +1,4 @@
+import { formatLegend } from '@openpanel/common';
 import { PROJECT_LABEL } from '@openpanel/gigapipe';
 import { formatClickhouseDate } from '../../clickhouse/client';
 import type { ConcreteSeries } from '../types';
@@ -207,6 +208,63 @@ export interface AdaptOptions {
 }
 
 /**
+ * Place each sample on the bucket grid the chart asked for.
+ *
+ * Values arrive as strings and may be `NaN` (Prometheus renders a missing
+ * quantile that way). `NaN` becomes a gap rather than a zero: zero is a real
+ * measurement and drawing one where the backend said "no data" invents a fact.
+ *
+ * Samples are SNAPPED to the nearest bucket rather than matched by an exact
+ * formatted date, because the backend does not return the grid it was asked
+ * for: a range starting at :137 past the hour comes back at :135. Exact
+ * matching therefore found nothing and, because a missing bucket reads as zero,
+ * drew a flat zero line — indistinguishable from "no data".
+ */
+function snapToGrid(
+  values: [number, string][],
+  options: Pick<AdaptOptions, 'buckets' | 'bucketTimes'>,
+): Map<string, number> {
+  const byDate = new Map<string, number>();
+  const grid = options.buckets;
+  const gridTimes = options.bucketTimes;
+  // Half a step: the widest a sample can be from a bucket's centre and still
+  // belong to it.
+  const tolerance =
+    gridTimes && gridTimes.length > 1
+      ? ((gridTimes[1] as number) - (gridTimes[0] as number)) / 2
+      : 0;
+
+  for (const [unixSeconds, raw] of values) {
+    const value = Number.parseFloat(raw);
+    if (Number.isNaN(value)) {
+      continue;
+    }
+
+    const ms = unixSeconds * 1000;
+
+    if (grid && gridTimes && gridTimes.length > 0 && tolerance > 0) {
+      const first = gridTimes[0] as number;
+      const step = tolerance * 2;
+      const index = Math.round((ms - first) / step);
+
+      if (index >= 0 && index < grid.length) {
+        const bucketMs = gridTimes[index] as number;
+        if (Math.abs(ms - bucketMs) <= tolerance) {
+          byDate.set(grid[index] as string, value);
+          continue;
+        }
+      }
+      // Outside the grid entirely: drop it rather than misdate it.
+      continue;
+    }
+
+    byDate.set(formatClickhouseDate(new Date(ms)), value);
+  }
+
+  return byDate;
+}
+
+/**
  * Convert a matrix response into `ConcreteSeries[]`.
  *
  * Values arrive as strings and may be `NaN` (Prometheus renders a missing
@@ -239,43 +297,7 @@ export function adaptMatrixToConcreteSeries(
     // the evidence with it.
     assertOwnedBy(labels, options.projectId);
 
-    const byDate = new Map<string, number>();
-    const grid = options.buckets;
-    const gridTimes = options.bucketTimes;
-    // Half a step: the widest a sample can be from a bucket's centre and still
-    // belong to it.
-    const tolerance =
-      gridTimes && gridTimes.length > 1
-        ? ((gridTimes[1] as number) - (gridTimes[0] as number)) / 2
-        : 0;
-
-    for (const [unixSeconds, raw] of series.values ?? []) {
-      const value = Number.parseFloat(raw);
-      if (Number.isNaN(value)) {
-        continue;
-      }
-
-      const ms = unixSeconds * 1000;
-
-      if (grid && gridTimes && gridTimes.length > 0 && tolerance > 0) {
-        const first = gridTimes[0] as number;
-        const step = tolerance * 2;
-        const index = Math.round((ms - first) / step);
-
-        if (index >= 0 && index < grid.length) {
-          const bucketMs = gridTimes[index] as number;
-          if (Math.abs(ms - bucketMs) <= tolerance) {
-            byDate.set(grid[index] as string, value);
-            continue;
-          }
-        }
-        // Outside the grid entirely: drop it rather than misdate it.
-        continue;
-      }
-
-      byDate.set(formatClickhouseDate(new Date(ms)), value);
-    }
-
+    const byDate = snapToGrid(series.values ?? [], options);
     const dates = options.buckets ?? [...byDate.keys()].sort();
 
     return {
@@ -307,5 +329,193 @@ export function adaptMatrixToConcreteSeries(
         filters: [],
       } as unknown as ConcreteSeries['definition'],
     } satisfies ConcreteSeries;
+  });
+}
+
+/** A single series in a Prometheus `vector` (instant) result. */
+export interface PromVectorSeries {
+  metric: Record<string, string>;
+  /** `[unixSeconds, "value"]` — one sample, not a list. */
+  value: [number, string];
+}
+
+export interface PromVectorResponse {
+  status: string;
+  data?: {
+    resultType?: string;
+    result?: PromVectorSeries[];
+  };
+}
+
+export interface PanelAdaptOptions {
+  /**
+   * The project this query was scoped to.
+   *
+   * Required for the same reason as on {@link AdaptOptions}: an ownership check
+   * a caller can omit is one a caller eventually omits, and it fails open when
+   * they do.
+   */
+  projectId: string;
+  /** The query this response answers: 'A', 'B', … */
+  refId: string;
+  /**
+   * The query's position in the panel, which `format()` turns into the `(A)`
+   * prefix. Taken from the query's index in the ORIGINAL list, so hiding query
+   * B does not relabel query C.
+   */
+  definitionIndex: number;
+  legendFormat?: string;
+  /** Whether the panel runs more than one visible query — see `formatLegend`. */
+  multi: boolean;
+  buckets?: string[];
+  bucketTimes?: number[];
+}
+
+/**
+ * A stable id for a panel series.
+ *
+ * Prefixed with the refId because two queries on one panel can legitimately
+ * return the same label set — `rate(x)` and `rate(x) * 2`, or the same metric
+ * at two quantiles — and without the prefix they would collide into one line
+ * with one colour, silently dropping a query from the chart.
+ */
+function panelSeriesId(refId: string, labels: Record<string, string>): string {
+  const parts = Object.entries(labels)
+    .filter(([key]) => key !== PROJECT_LABEL)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${value}`);
+
+  return `${refId}:${parts.join(',') || 'series'}`;
+}
+
+/**
+ * The definition every series of one query points at.
+ *
+ * NO `displayName`. `format()` splices a definition's displayName over the
+ * first element of every series name, which would overwrite each line's legend
+ * and render every series of a query under the same text.
+ */
+function panelDefinition(refId: string): ConcreteSeries['definition'] {
+  return {
+    id: refId,
+    type: 'event',
+    name: refId,
+    segment: 'event',
+    filters: [],
+  } as unknown as ConcreteSeries['definition'];
+}
+
+function panelConcreteSeries(
+  labels: Record<string, string>,
+  data: ConcreteSeries['data'],
+  options: PanelAdaptOptions,
+): ConcreteSeries {
+  return {
+    id: panelSeriesId(options.refId, labels),
+    definitionId: options.refId,
+    definitionIndex: options.definitionIndex,
+    name: [
+      formatLegend(options.legendFormat, labels, {
+        refId: options.refId,
+        multi: options.multi,
+      }),
+    ],
+    context: {
+      filters: [],
+      breakdowns: breakdownsOf(labels),
+    },
+    data,
+    definition: panelDefinition(options.refId),
+  } satisfies ConcreteSeries;
+}
+
+function assertResultType(
+  response: { status: string; data?: { resultType?: string } },
+  expected: 'matrix' | 'vector',
+): void {
+  if (response.status !== 'success') {
+    throw new MetricsResponseError(
+      `Telemetry backend returned status ${response.status}`,
+    );
+  }
+
+  const resultType = response.data?.resultType;
+  if (resultType && resultType !== expected) {
+    throw new MetricsResponseError(
+      `Expected a ${expected} result, got ${resultType}`,
+    );
+  }
+}
+
+/**
+ * Convert one panel query's range response into `ConcreteSeries[]`.
+ *
+ * The same tenancy contract as {@link adaptMatrixToConcreteSeries}:
+ * `assertOwnedBy` runs FIRST, before anything strips the project label and
+ * takes the evidence with it.
+ */
+export function adaptMatrixToPanelSeries(
+  response: PromMatrixResponse,
+  options: PanelAdaptOptions,
+): ConcreteSeries[] {
+  assertResultType(response, 'matrix');
+
+  return (response.data?.result ?? []).map((series) => {
+    const labels = series.metric ?? {};
+
+    assertOwnedBy(labels, options.projectId);
+
+    const byDate = snapToGrid(series.values ?? [], options);
+    const dates = options.buckets ?? [...byDate.keys()].sort();
+
+    return panelConcreteSeries(
+      labels,
+      dates.map((date) => ({ date, count: byDate.get(date) ?? 0 })),
+      options,
+    );
+  });
+}
+
+/**
+ * Convert one panel query's INSTANT response into `ConcreteSeries[]`.
+ *
+ * An instant query answers "what is it right now", so each series carries
+ * exactly ONE data point, dated at the last bucket of the grid. It is not
+ * spread across the grid as a flat line: that would claim the value held for
+ * the whole window, which is the one thing an instant query cannot tell you,
+ * and it would make Min and Max on the report table read as a measured range
+ * rather than as a single sample repeated.
+ *
+ * This shape is meant for the stat panel. On a time chart an instant query
+ * therefore renders as a single point at the right-hand edge.
+ */
+export function adaptVectorToPanelSeries(
+  response: PromVectorResponse,
+  options: PanelAdaptOptions,
+): ConcreteSeries[] {
+  assertResultType(response, 'vector');
+
+  const at =
+    options.buckets && options.buckets.length > 0
+      ? (options.buckets.at(-1) as string)
+      : undefined;
+
+  return (response.data?.result ?? []).flatMap((series) => {
+    const labels = series.metric ?? {};
+
+    assertOwnedBy(labels, options.projectId);
+
+    const [unixSeconds, raw] = series.value ?? [0, 'NaN'];
+    const value = Number.parseFloat(raw);
+
+    // `NaN` is a gap, not a zero — and an instant series whose only sample is a
+    // gap has nothing to draw at all.
+    if (Number.isNaN(value)) {
+      return [];
+    }
+
+    const date = at ?? formatClickhouseDate(new Date(unixSeconds * 1000));
+
+    return [panelConcreteSeries(labels, [{ date, count: value }], options)];
   });
 }

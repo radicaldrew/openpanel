@@ -14,6 +14,7 @@
 import type { IChartBreakdown, IChartEvent } from '@openpanel/validation';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ch } from '../clickhouse/client';
+import { db } from '../prisma-client';
 import {
   getAggregateChartSql as _getAggregateChartSql,
   getChartSql as _getChartSql,
@@ -64,6 +65,44 @@ beforeAll(async () => {
 afterAll(() => {
   vi.restoreAllMocks();
 });
+
+/**
+ * Make "this project has no cohorts" a fact of the test rather than a hope
+ * about the database.
+ *
+ * A `cohort` breakdown is the one input in this file that makes the SQL
+ * builders read POSTGRES — `getChartSql` calls `fetchProjectCohorts` before it
+ * decides whether to keep the breakdown. This file's skip guard only checks
+ * ClickHouse, so on a machine with CH up and no reachable PG (no DATABASE_URL,
+ * for instance) these two tests were the only ones that failed, with a Prisma
+ * connection error rather than anything about SQL.
+ *
+ * Stubbing the read fixes both halves of that. The premise in the test's name
+ * becomes true by construction — the previous version relied on PROJECT_ID
+ * being a project that "almost certainly has no cohorts", so seeding one
+ * cohort for it would have quietly turned this into a test of the opposite
+ * branch — and the test stops needing a second database to assert something
+ * about ClickHouse SQL.
+ */
+const withNoCohorts = async (fn: () => Promise<void>) => {
+  const spy = vi.spyOn(db.cohort, 'findMany').mockResolvedValue([]);
+
+  try {
+    await fn();
+
+    // The stub has to actually be on the path under test. Without this the
+    // test would keep passing if the builder stopped consulting the cohort
+    // list at all — the SQL would contain no `_all_cohorts` for the wrong
+    // reason, and the assertions below cannot tell those two apart.
+    expect(spy).toHaveBeenCalled();
+  } finally {
+    // try/finally rather than `using`: explicit resource management needs a
+    // `Symbol.dispose` from the runtime, and this suite runs on a different
+    // Node major locally than in CI. Not worth a version dependency to save
+    // two lines.
+    spy.mockRestore();
+  }
+};
 
 const itCH = (name: string, fn: () => Promise<void>) =>
   it(name, async () => {
@@ -138,26 +177,27 @@ describe('chart.service / getChartSql', () => {
 
   itCH(
     'drops the all-cohorts breakdown when the project has 0 cohorts',
-    async () => {
-      const sql = await getChartSql({
-        event: event({ segment: 'user' }),
-        breakdowns: [breakdown('cohort')],
-        interval: 'day',
-        startDate: START,
-        endDate: END,
-        // Use a project that almost certainly has no cohorts in PG.
-        projectId: PROJECT_ID,
-        timezone: 'UTC',
-      });
+    // Stated, not hoped for. See `withNoCohorts`.
+    () =>
+      withNoCohorts(async () => {
+        const sql = await getChartSql({
+          event: event({ segment: 'user' }),
+          breakdowns: [breakdown('cohort')],
+          interval: 'day',
+          startDate: START,
+          endDate: END,
+          projectId: PROJECT_ID,
+          timezone: 'UTC',
+        });
 
-      // The all-cohorts JOIN expanded to `_uc._uc_label_X = 'Unknown'`, a
-      // constant predicate with no join key — CH rejects it. The fix is to
-      // remove the breakdown entirely when there are no cohorts.
-      expect(sql).not.toMatch(/_uc_label_\d+\s*=\s*'Unknown'/);
-      expect(sql).not.toContain('_all_cohorts');
+        // The all-cohorts JOIN expanded to `_uc._uc_label_X = 'Unknown'`, a
+        // constant predicate with no join key — CH rejects it. The fix is to
+        // remove the breakdown entirely when there are no cohorts.
+        expect(sql).not.toMatch(/_uc_label_\d+\s*=\s*'Unknown'/);
+        expect(sql).not.toContain('_all_cohorts');
 
-      await explain(sql);
-    },
+        await explain(sql);
+      }),
   );
 
   itCH('skips WITH FILL when endDate < startDate', async () => {
@@ -389,18 +429,20 @@ describe('chart.service / getChartSql', () => {
 });
 
 describe('chart.service / getAggregateChartSql', () => {
-  itCH('drops all-cohorts breakdown on empty cohort project', async () => {
-    const sql = await getAggregateChartSql({
-      event: event({ segment: 'user' }),
-      breakdowns: [breakdown('cohort')],
-      startDate: START,
-      endDate: END,
-      projectId: PROJECT_ID,
-      timezone: 'UTC',
-    });
-    expect(sql).not.toMatch(/_uc_label_\d+\s*=\s*'Unknown'/);
-    await explain(sql);
-  });
+  itCH('drops all-cohorts breakdown on empty cohort project', () =>
+    withNoCohorts(async () => {
+      const sql = await getAggregateChartSql({
+        event: event({ segment: 'user' }),
+        breakdowns: [breakdown('cohort')],
+        startDate: START,
+        endDate: END,
+        projectId: PROJECT_ID,
+        timezone: 'UTC',
+      });
+      expect(sql).not.toMatch(/_uc_label_\d+\s*=\s*'Unknown'/);
+      await explain(sql);
+    }),
+  );
 
   itCH('properties + group breakdown is unambiguous', async () => {
     const sql = await getAggregateChartSql({

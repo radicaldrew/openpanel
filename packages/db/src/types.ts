@@ -5,6 +5,8 @@ import type {
   IIntegrationConfig,
   INotificationRuleConfig,
   IMetricQuery,
+  IDashboardVariable,
+  IPanelQuery,
   IProjectFilters,
   ISavedTelemetryQuery,
   IWidgetOptions,
@@ -45,6 +47,16 @@ declare global {
     // cannot be fed back through the chart pipeline. zod defaults are applied on
     // write, so the stored JSON always has them.
     type IPrismaMetricQuery = IMetricQuery;
+    // The PromQL queries behind a multi-query metrics panel. Unlike
+    // `IPrismaMetricQuery` above, `expr` here IS raw PromQL — the tenancy gate
+    // moved from "only the compiler emits a selector" to "the server rewrites
+    // every selector before it leaves", so a stored expression is safe to keep
+    // verbatim. zod defaults are applied on write, so the stored JSON always
+    // has mode/hidden/unit/yAxis/instant.
+    type IPrismaPanelQueries = IPanelQuery[];
+    // A dashboard's variable definitions. Current values are URL state, not
+    // stored here.
+    type IPrismaDashboardVariables = IDashboardVariable[];
     // A saved log or trace search. Structured, never a raw query string.
     type IPrismaSavedTelemetryQuery = ISavedTelemetryQuery;
     // Each ChatMessage row stores one Better Agent `ConversationItem`

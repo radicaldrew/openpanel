@@ -316,6 +316,148 @@ export const zMetricQuery = z.object({
 export type IMetricQuery = z.infer<typeof zMetricQuery>;
 
 /**
+ * The unit a panel query's values carry.
+ *
+ * Deliberately a closed enum, unlike the free-string `unit` on `zReportInput`:
+ * these drive `formatValue` (seconds → auto ms/µs, bytes → KiB/MiB/GiB) and an
+ * unrecognised string there would silently format as a bare number.
+ */
+export const zPromqlUnit = z.enum([
+  'none',
+  'short',
+  'percent',
+  'percentunit',
+  'seconds',
+  'ms',
+  'bytes',
+  'ops',
+]);
+
+export type IPromqlUnit = z.infer<typeof zPromqlUnit>;
+
+/**
+ * One step of the builder's left-to-right pipeline. `compileBuilder` folds the
+ * list into nested PromQL, so order is meaningful: `rate` then `sum by (le)`
+ * then `histogram_quantile` is a p95, the reverse is nonsense.
+ */
+export const zBuilderOp = z.discriminatedUnion('op', [
+  z.object({
+    op: z.enum(['rate', 'increase', 'irate', 'delta']),
+    // '5m' or a variable such as '$__rate_interval'
+    range: z.string().max(20),
+  }),
+  z.object({
+    op: z.literal('histogram_quantile'),
+    q: z.number().min(0).max(1),
+  }),
+  z.object({
+    op: z.enum(['sum', 'avg', 'min', 'max', 'count']),
+    by: z.array(z.string().max(200)).max(10).optional(),
+    without: z.array(z.string().max(200)).max(10).optional(),
+  }),
+  z.object({
+    op: z.enum(['topk', 'bottomk']),
+    k: z.number().int().min(1).max(100),
+  }),
+  z.object({
+    op: z.literal('binary'),
+    operator: z.enum(['+', '-', '*', '/']),
+    rhs: z.string().max(2000),
+  }),
+  z.object({
+    op: z.literal('raw'),
+    expr: z.string().max(4000),
+  }),
+]);
+
+export type IBuilderOp = z.infer<typeof zBuilderOp>;
+
+export const zPromqlBuilderState = z.object({
+  metric: z.string().max(200),
+  labelMatchers: z
+    .array(
+      z.object({
+        label: z.string().min(1).max(200),
+        op: z.enum(['=', '!=', '=~', '!~']),
+        value: z.string().max(2000),
+      }),
+    )
+    .max(20)
+    .default([]),
+  operations: z.array(zBuilderOp).max(20).default([]),
+});
+
+export type IPromqlBuilderState = z.infer<typeof zPromqlBuilderState>;
+
+/**
+ * One query inside a metrics panel. A panel holds up to ten of these.
+ *
+ * `expr` is ALWAYS what runs — after variable substitution client-side values
+ * are folded in, and after `rewritePromqlForProject` injects the tenancy
+ * matcher server-side. `builder` is only the structured state the editor
+ * round-trips when the expression happens to be expressible in the builder; it
+ * is never compiled at query time. That is the whole point of the column: a
+ * panel saved from code mode has no builder state and still runs.
+ */
+export const zPanelQuery = z.object({
+  // 'A', 'B', … — identifies the query in legends, errors and series ids
+  refId: z.string().min(1).max(4),
+  expr: z.string().min(1).max(4000),
+  mode: z.enum(['builder', 'code']).default('code'),
+  builder: zPromqlBuilderState.optional(),
+  legendFormat: z.string().max(200).optional(),
+  hidden: z.boolean().default(false),
+  unit: zPromqlUnit.default('none'),
+  yAxis: z.enum(['left', 'right']).default('left'),
+  // A floor on the engine's computed step, e.g. '15s'
+  minStep: z.string().max(20).optional(),
+  instant: z.boolean().default(false),
+});
+
+export type IPanelQuery = z.infer<typeof zPanelQuery>;
+
+/**
+ * A dashboard-level variable. `query` variables resolve their options through
+ * `observability.variableOptions`, which only understands
+ * `label_values(<selector>, <label>)` and `label_names()`.
+ */
+export const zDashboardVariable = z.object({
+  name: z
+    .string()
+    .regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/)
+    .max(64),
+  label: z.string().max(100).optional(),
+  type: z.enum(['query', 'custom', 'interval']),
+  query: z.string().max(500).optional(),
+  options: z.array(z.string().max(500)).max(500).optional(),
+  multi: z.boolean().default(false),
+  includeAll: z.boolean().default(false),
+  current: z.union([z.string(), z.array(z.string())]).optional(),
+});
+
+export type IDashboardVariable = z.infer<typeof zDashboardVariable>;
+
+/** Values as resolved on the client; substituted server-side. */
+export const zVariableValues = z.record(
+  z.string().max(64),
+  z.union([z.string().max(2000), z.array(z.string().max(2000)).max(200)]),
+);
+
+export type IVariableValues = z.infer<typeof zVariableValues>;
+
+export const zAnnotationInput = z.object({
+  projectId: z.string(),
+  // null = global: shown on every dashboard in the project
+  dashboardId: z.string().nullable().default(null),
+  time: z.string(),
+  timeEnd: z.string().nullable().default(null),
+  text: z.string().min(1).max(2000),
+  tags: z.array(z.string().max(50)).max(20).default([]),
+});
+
+export type IAnnotationInput = z.infer<typeof zAnnotationInput>;
+
+/**
  * A saved log or trace search.
  *
  * Structured, not a raw LogQL string: the compiler is the only thing permitted
@@ -400,7 +542,26 @@ export const zReportInput = z.object({
     ),
   metricQuery: zMetricQuery
     .optional()
-    .describe('The metric query, required when dataSource is "metrics"'),
+    .describe(
+      'Legacy single structured metric query. Kept as a read fallback for reports saved before multi-query panels; new writes use metricQueries',
+    ),
+  // Optional rather than `.default([])`, for the same reason as `dataSource`
+  // above: a default makes the OUTPUT type required, which would force every
+  // caller that builds a chart input — the engine, the funnel service, dozens
+  // of dashboard call sites — to spell out a field only metric panels care
+  // about. Readers treat absent and empty as the same thing.
+  metricQueries: z
+    .array(zPanelQuery)
+    .max(10)
+    .optional()
+    .describe(
+      'The PromQL queries this panel runs, when dataSource is "metrics"',
+    ),
+  variables: zVariableValues
+    .optional()
+    .describe(
+      'Dashboard variable values to substitute into the panel queries before they run',
+    ),
   chartType: zChartType
     .default('linear')
     .describe('What type of chart should be displayed'),
@@ -497,23 +658,43 @@ export const zReportInput = z.object({
  * dropping these two fields went unnoticed.
  */
 export const refineReportDataSource = (
-  report: { dataSource?: IReportDataSource; metricQuery?: unknown },
+  report: {
+    dataSource?: IReportDataSource;
+    metricQuery?: unknown;
+    metricQueries?: unknown;
+  },
   ctx: z.RefinementCtx,
 ) => {
-  if (report.dataSource === 'metrics' && !report.metricQuery) {
+  // `metricQueries` defaults to `[]`, so presence is not enough — an events
+  // report carries an empty array and must not be treated as holding queries.
+  const hasPanelQueries =
+    Array.isArray(report.metricQueries) && report.metricQueries.length > 0;
+
+  if (report.dataSource === 'metrics' && !hasPanelQueries && !report.metricQuery) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      path: ['metricQuery'],
-      message: 'A metrics report needs a metricQuery',
+      path: ['metricQueries'],
+      message: 'A metrics report needs at least one metric query',
     });
   }
 
-  if (report.metricQuery && report.dataSource !== 'metrics') {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['dataSource'],
-      message: 'A metricQuery is only meaningful when dataSource is "metrics"',
-    });
+  if (report.dataSource !== 'metrics') {
+    if (hasPanelQueries) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['dataSource'],
+        message:
+          'metricQueries are only meaningful when dataSource is "metrics"',
+      });
+    }
+
+    if (report.metricQuery) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['dataSource'],
+        message: 'A metricQuery is only meaningful when dataSource is "metrics"',
+      });
+    }
   }
 };
 

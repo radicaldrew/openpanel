@@ -31,6 +31,7 @@ export { stepSeries } from './src/alerts/state-machine';
 export type {
   GigapipeConfig,
   GigapipeRoute,
+  InstantQueryParams,
   RangeQueryParams,
 } from './src/client';
 export {
@@ -41,6 +42,7 @@ export {
   isGigapipeEnabled,
   postToGigapipe,
   pushLogs,
+  queryInstant,
   queryLogPatterns,
   queryLogRange,
   queryRange,

@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { GanttChartSquareIcon, ShareIcon } from 'lucide-react';
 import { useEffect } from 'react';
 import EditReportName from '../report/edit-report-name';
-import { MetricQueryEditor } from '@/components/report/metric-query-editor';
+import { QueryRows } from '@/components/promql/query-rows';
 import { ReportChartType } from '@/components/report/ReportChartType';
 import { ReportInterval } from '@/components/report/ReportInterval';
 import { ReportLineType } from '@/components/report/ReportLineType';
@@ -13,16 +13,19 @@ import {
   ReportDataSource,
 } from '@/components/report/report-data-source';
 import {
+  addMetricQuery,
   changeChartType,
   changeDataSource,
   changeDateRanges,
   changeEndDate,
   changeInterval,
-  changeMetricQuery,
   changeStartDate,
+  duplicateMetricQuery,
   ready,
+  removeMetricQuery,
   reset,
   setReport,
+  updateMetricQuery,
 } from '@/components/report/reportSlice';
 import { ReportSidebar } from '@/components/report/sidebar/ReportSidebar';
 import { ReportChart } from '@/components/report-chart';
@@ -57,6 +60,20 @@ export default function ReportEditor({
   // that has never written a metric.
   const telemetry = useQuery(trpc.observability.enabled.queryOptions());
   const telemetryEnabled = telemetry.data?.enabled ?? false;
+
+  /**
+   * Whether there is anything for the metrics engine to run.
+   *
+   * A visible query with an empty `expr` is the normal state of a row that is
+   * still being built — the builder compiles to nothing until a metric is
+   * picked — and sending it produces a validation error rather than a chart.
+   * The legacy single `metricQuery` counts too: a report saved before
+   * multi-query panels still renders from it until the migration runs.
+   */
+  const hasRunnableQuery =
+    report.metricQueries.some(
+      (query) => !query.hidden && query.expr.trim() !== '',
+    ) || !!report.metricQuery?.metric;
 
   // Set report if reportId exists
   useEffect(() => {
@@ -155,21 +172,29 @@ export default function ReportEditor({
         </div>
         {isMetricReport && (
           <div className="px-4 pb-2">
-            <MetricQueryEditor
+            <QueryRows
               enabled={telemetryEnabled}
-              onChange={(next) => dispatch(changeMetricQuery(next))}
+              onAdd={(query) => dispatch(addMetricQuery(query))}
+              onDuplicate={(refId) => dispatch(duplicateMetricQuery(refId))}
+              onRemove={(refId) => dispatch(removeMetricQuery(refId))}
+              onUpdate={(refId, query) =>
+                dispatch(updateMetricQuery({ refId, query }))
+              }
               projectId={projectId}
-              value={report.metricQuery ?? null}
+              // An instant query returns one value rather than a series, which
+              // is only what the stat card wants.
+              showInstant={report.chartType === 'metric'}
+              value={report.metricQueries}
             />
           </div>
         )}
         <div className="flex flex-col gap-4 p-4" id="report-editor">
           {report.ready &&
-            (isMetricReport && !report.metricQuery?.metric ? (
-              // A metrics report with no query throws in the engine rather than
-              // drawing an empty chart, so a report that has just been switched
-              // over has to be held back until a metric is chosen. Same wording
-              // as the metrics explorer's own placeholder.
+            (isMetricReport && !hasRunnableQuery ? (
+              // A metrics report with nothing to run throws in the engine
+              // rather than drawing an empty chart, so a report that has just
+              // been switched over has to be held back until a query is built.
+              // Same wording as the metrics explorer's own placeholder.
               <div className="rounded-lg border border-dashed p-12 text-center text-muted-foreground">
                 Pick a metric to chart it.
               </div>

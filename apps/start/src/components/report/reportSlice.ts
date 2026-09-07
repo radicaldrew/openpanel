@@ -1,6 +1,7 @@
 import type { PayloadAction } from '@reduxjs/toolkit';
 import { createSlice } from '@reduxjs/toolkit';
 
+import { createPanelQuery, nextRefId } from '@/components/promql/panel-query';
 import { shortId } from '@openpanel/common';
 import {
   getDefaultIntervalByDates,
@@ -18,6 +19,7 @@ import type {
   IChartType,
   IInterval,
   IMetricQuery,
+  IPanelQuery,
   IReport,
   IReportDataSource,
   IReportOptions,
@@ -43,9 +45,19 @@ type InitialState = IReport & {
    * here is what makes the toggle a look rather than a commitment.
    */
   stashedMetricQuery?: IMetricQuery;
-  // Always an array in state (initialState + setReport guarantee it) so the
+  /**
+   * The panel queries of a report that has been switched back to events.
+   *
+   * Same reason as `stashedMetricQuery` above, for the same refinement: an
+   * events report carrying `metricQueries` is rejected by
+   * `refineReportDataSource`, so the list has to leave `metricQueries` rather
+   * than sit there dormant the way `series` does.
+   */
+  stashedMetricQueries?: IPanelQuery[];
+  // Always arrays in state (initialState + setReport guarantee it) so the
   // reducers below can push/map without optional-chaining.
   globalFilters: IChartEventFilter[];
+  metricQueries: IPanelQuery[];
 };
 
 // First approach: define the initial state using that type
@@ -70,7 +82,9 @@ const initialState: InitialState = {
   limit: 500,
   options: undefined,
   visibleSeries: undefined,
+  metricQueries: [],
   stashedMetricQuery: undefined,
+  stashedMetricQueries: undefined,
 };
 
 export const reportSlice = createSlice({
@@ -97,6 +111,7 @@ export const reportSlice = createSlice({
         ...state,
         ...action.payload,
         globalFilters: action.payload.globalFilters ?? [],
+        metricQueries: action.payload.metricQueries ?? [],
         startDate: action.payload.startDate ?? null,
         endDate: action.payload.endDate ?? null,
         dirty: false,
@@ -253,6 +268,17 @@ export const reportSlice = createSlice({
         state.metricQuery = state.stashedMetricQuery;
         state.stashedMetricQuery = undefined;
 
+        // The panel queries come back if there were any, and otherwise the
+        // panel starts with one empty builder row. An empty LIST would render
+        // a metrics panel with no editor at all and no obvious way to add one,
+        // where a row with no metric picked reads as the thing to fill in.
+        state.metricQueries = state.stashedMetricQueries ?? [];
+        state.stashedMetricQueries = undefined;
+
+        if (state.metricQueries.length === 0 && !state.metricQuery) {
+          state.metricQueries = [createPanelQuery('A')];
+        }
+
         // A metric report has to come back to a chart the metrics engine can
         // serve; the picker never offers the rest, but a report switched over
         // from events can be sitting on any of them.
@@ -262,7 +288,99 @@ export const reportSlice = createSlice({
       } else {
         state.stashedMetricQuery = state.metricQuery;
         state.metricQuery = undefined;
+        state.stashedMetricQueries = state.metricQueries;
+        state.metricQueries = [];
       }
+    },
+
+    /**
+     * Replace every query in the panel at once.
+     *
+     * The bulk form exists for the surfaces that own the list themselves — the
+     * explorer restoring one from the URL, "Add to dashboard" carrying one
+     * over. The editor uses the four granular actions below, because replacing
+     * the whole list on every keystroke would make each row's identity depend
+     * on its position and re-key the editors mid-word.
+     */
+    setMetricQueries(state, action: PayloadAction<IPanelQuery[]>) {
+      state.dirty = true;
+      state.dataSource = 'metrics';
+      state.metricQueries = action.payload;
+    },
+
+    addMetricQuery(state, action: PayloadAction<IPanelQuery | undefined>) {
+      state.dirty = true;
+      state.dataSource = 'metrics';
+      state.metricQueries.push(
+        action.payload ?? createPanelQuery(nextRefId(state.metricQueries)),
+      );
+    },
+
+    updateMetricQuery(
+      state,
+      action: PayloadAction<{ refId: string; query: IPanelQuery }>,
+    ) {
+      const index = state.metricQueries.findIndex(
+        (query) => query.refId === action.payload.refId,
+      );
+
+      if (index === -1) {
+        return;
+      }
+
+      // Read the outgoing metric BEFORE overwriting, or the comparison below is
+      // against the value that was just assigned and never matches.
+      const previousMetric = state.metricQueries[index]?.builder?.metric;
+      const nextMetric = action.payload.query.builder?.metric;
+
+      state.dirty = true;
+      state.metricQueries[index] = action.payload.query;
+
+      // The report name follows the FIRST query's metric until someone renames
+      // it, which is what the explorer saves. A name the user chose is left
+      // alone, and so is a name that came from another query in the panel.
+      if (
+        index === 0 &&
+        nextMetric &&
+        (!state.name || state.name === previousMetric)
+      ) {
+        state.name = nextMetric;
+      }
+    },
+
+    removeMetricQuery(state, action: PayloadAction<string>) {
+      state.dirty = true;
+      state.metricQueries = state.metricQueries.filter(
+        (query) => query.refId !== action.payload,
+      );
+    },
+
+    duplicateMetricQuery(state, action: PayloadAction<string>) {
+      const source = state.metricQueries.find(
+        (query) => query.refId === action.payload,
+      );
+
+      if (!source) {
+        return;
+      }
+
+      state.dirty = true;
+      state.metricQueries.push({
+        ...source,
+        // A deep copy of the builder state: the two rows are edited
+        // independently from here, and a shared `operations` array would make
+        // every chip change on one show up on the other.
+        builder: source.builder
+          ? {
+              ...source.builder,
+              labelMatchers: source.builder.labelMatchers.map((matcher) => ({
+                ...matcher,
+              })),
+              operations: source.builder.operations.map((op) => ({ ...op })),
+            }
+          : undefined,
+        refId: nextRefId(state.metricQueries),
+      });
     },
 
     /**
@@ -540,6 +658,11 @@ export const {
   changeChartType,
   changeDataSource,
   changeMetricQuery,
+  setMetricQueries,
+  addMetricQuery,
+  updateMetricQuery,
+  removeMetricQuery,
+  duplicateMetricQuery,
   changeLineType,
   resetDirty,
   changeFormula,

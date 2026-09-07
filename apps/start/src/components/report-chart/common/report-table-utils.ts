@@ -11,6 +11,14 @@ export type TableRow = {
   average: number;
   min: number;
   max: number;
+  /**
+   * The most recent value in the series.
+   *
+   * Shown INSTEAD of Sum when no visible series is additive — the total of
+   * every p95 sample in a window is not a latency anyone can act on, while the
+   * latest one is the number the panel exists to show. See `showsSumColumn`.
+   */
+  last: number;
   dateValues: Record<string, number>; // date -> count
   // Group metadata
   groupKey?: string;
@@ -431,9 +439,31 @@ export function createFlatRows(
       average: serie.metrics.average,
       min: serie.metrics.min,
       max: serie.metrics.max,
+      last: lastSerieValue(serie),
       dateValues,
     };
   });
+}
+
+/**
+ * The last finite value of a series.
+ *
+ * A trailing 0 is kept: the engine renders a bucket the backend did not answer
+ * as 0 and a `NaN` sample as a gap, so a zero here is a real measurement.
+ * Mirrors `lastValue` in ./series-units.ts, which the charts use — duplicated
+ * rather than imported because this module is deliberately free of chart
+ * concerns and takes the raw series shape.
+ */
+function lastSerieValue(serie: IChartData['series'][number]): number {
+  for (let i = serie.data.length - 1; i >= 0; i -= 1) {
+    const count = serie.data[i]?.count;
+
+    if (typeof count === 'number' && Number.isFinite(count)) {
+      return count;
+    }
+  }
+
+  return 0;
 }
 
 /**
@@ -569,6 +599,11 @@ export function createSummaryRow(
     groupRows.reduce((sum, row) => sum + row.average, 0) / groupRows.length;
   const totalMin = Math.min(...groupRows.map((row) => row.min));
   const totalMax = Math.max(...groupRows.map((row) => row.max));
+  // The MEAN of the group's last values, not their sum. Last only replaces Sum
+  // when nothing on the chart is additive, and adding up a group of latencies
+  // is the arithmetic that column exists to avoid.
+  const groupLast =
+    groupRows.reduce((acc, row) => acc + row.last, 0) / groupRows.length;
 
   // Aggregate date values across all rows
   const dateValues: Record<string, number> = {};
@@ -594,6 +629,7 @@ export function createSummaryRow(
     average: totalAverage,
     min: totalMin,
     max: totalMax,
+    last: groupLast,
     dateValues,
     groupKey,
     isSummaryRow: true,

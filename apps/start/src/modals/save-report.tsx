@@ -35,24 +35,44 @@ type SaveReportProps = {
 function ProposedReport({ report }: { report: IReport }) {
   const rows: { label: string; value: string }[] = [];
 
-  if (report.dataSource === 'metrics' && report.metricQuery) {
-    const q = report.metricQuery;
+  const metricQueries = report.metricQueries ?? [];
 
+  if (
+    report.dataSource === 'metrics' &&
+    (metricQueries.length > 0 || report.metricQuery)
+  ) {
     rows.push({ label: 'Source', value: 'Server metrics' });
-    rows.push({ label: 'Metric', value: q.metric });
-    rows.push({ label: 'Function', value: `${q.fn} · ${q.aggregation}` });
 
-    if (q.matchers?.length) {
-      rows.push({
-        label: 'Filters',
-        value: q.matchers
-          .map((m) => `${m.name} ${m.operator} ${m.value}`)
-          .join(', '),
-      });
-    }
+    if (metricQueries.length > 0) {
+      // The PromQL itself, not a summary of it. `expr` is what runs — the
+      // builder state beside it is only how it was written — so anything else
+      // here would be describing a query other than the one being saved, which
+      // is the exact failure this dialog exists to catch.
+      for (const query of metricQueries) {
+        rows.push({
+          label: `Query ${query.refId}`,
+          value: query.hidden ? `${query.expr} (hidden)` : query.expr,
+        });
+      }
+    } else if (report.metricQuery) {
+      // A report still on the legacy single structured query.
+      const q = report.metricQuery;
 
-    if (q.groupBy?.length) {
-      rows.push({ label: 'Group by', value: q.groupBy.join(', ') });
+      rows.push({ label: 'Metric', value: q.metric });
+      rows.push({ label: 'Function', value: `${q.fn} · ${q.aggregation}` });
+
+      if (q.matchers?.length) {
+        rows.push({
+          label: 'Filters',
+          value: q.matchers
+            .map((m) => `${m.name} ${m.operator} ${m.value}`)
+            .join(', '),
+        });
+      }
+
+      if (q.groupBy?.length) {
+        rows.push({ label: 'Group by', value: q.groupBy.join(', ') });
+      }
     }
   } else {
     rows.push({ label: 'Source', value: 'Product events' });

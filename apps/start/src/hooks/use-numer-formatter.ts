@@ -1,5 +1,8 @@
 import { round } from '@/utils/math';
+import { formatValue } from '@openpanel/common';
+import type { IPromqlUnit } from '@openpanel/validation';
 import { isNil } from 'ramda';
+import { useMemo } from 'react';
 
 export function fancyMinutes(time: number) {
   const minutes = Math.floor(time / 60);
@@ -105,4 +108,47 @@ export function useNumber() {
       return `${format(value)}${unit ? ` ${unit}` : ''}`;
     },
   };
+}
+
+/**
+ * Values on a chart that may carry EITHER kind of unit.
+ *
+ * A metrics panel gives every series a typed `IPromqlUnit` from its own query —
+ * `seconds`, `bytes`, `percentunit` — and `formatValue` knows how to scale each
+ * one (34 ms rather than 0.034, 3 GiB rather than 3221225472). An events report
+ * has no such thing: it carries one free-string `report.unit` (`%`, `min`, `$`)
+ * that the legacy formatter special-cases.
+ *
+ * Both paths stay, and the typed one wins when it is present. Collapsing them
+ * into one would either lose the scaling a metrics panel needs or break the
+ * three strings events reports have always used.
+ */
+export function useUnitFormat() {
+  const number = useNumber();
+
+  return useMemo(
+    () => ({
+      /** Full precision: tooltips, tables, stat cards. */
+      full: (
+        value: number | null | undefined,
+        unit: IPromqlUnit | undefined,
+        legacyUnit?: string | null,
+      ) => {
+        if (isNil(value)) {
+          return 'N/A';
+        }
+
+        return unit ? formatValue(value, unit) : number.formatWithUnit(value, legacyUnit);
+      },
+      /**
+       * Compact: axis ticks, where the width of the label decides the width of
+       * the axis. Without a typed unit this stays exactly as it was — the
+       * legacy axis has never rendered `report.unit` on a tick, and starting
+       * now would change every existing events chart.
+       */
+      tick: (value: number, unit: IPromqlUnit | undefined) =>
+        unit ? formatValue(value, unit) : number.short(value),
+    }),
+    [number],
+  );
 }

@@ -274,6 +274,53 @@ export async function validateImportRequest(
   return client;
 }
 
+/**
+ * A client posting an annotation (a deploy marker, an incident note).
+ *
+ * `write` and `root`, not the `read`/`root` pair the export and import routes
+ * use: this WRITES project data, and the credential a deploy pipeline already
+ * has is the one it tracks events with. A secret is mandatory — the
+ * cors-only path that `validateSdkRequest` allows for browser SDKs is not
+ * offered here, because an annotation is authored by infrastructure, never by
+ * a page.
+ */
+export async function validateAnnotationRequest(
+  headers: RawRequestDefaultExpression['headers']
+): Promise<IServiceClientWithProject> {
+  const clientId = headers['openpanel-client-id'] as string;
+  const clientSecret = (headers['openpanel-client-secret'] as string) || '';
+
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+      clientId
+    )
+  ) {
+    throw new Error('Annotation: Client ID must be a valid UUIDv4');
+  }
+
+  const client = await getClientByIdCached(clientId);
+
+  if (!client) {
+    throw new Error('Annotation: Invalid client id');
+  }
+
+  if (!client.secret) {
+    throw new Error('Annotation: Client has no secret');
+  }
+
+  assertClientTypeAllowed(
+    client,
+    [ClientType.write, ClientType.root],
+    'Annotation'
+  );
+
+  if (!(await verifyPassword(clientSecret, client.secret))) {
+    throw new Error('Annotation: Invalid client secret');
+  }
+
+  return client;
+}
+
 export async function validateManageRequest(
   headers: RawRequestDefaultExpression['headers']
 ): Promise<IServiceClientWithProject> {

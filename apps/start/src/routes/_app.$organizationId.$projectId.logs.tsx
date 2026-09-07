@@ -1,10 +1,19 @@
 import { FullPageEmptyState } from '@/components/full-page-empty-state';
 import { PageContainer } from '@/components/page-container';
+import {
+  aroundTimestamp,
+  isoFromNanos,
+  resolveTelemetryWindow,
+  tracesUrl,
+} from '@/components/telemetry-links/telemetry-urls';
+import { splitTraceIds } from '@/components/telemetry-links/trace-ids';
+import { useExploreSuggestion } from '@/components/telemetry-links/use-explore-suggestion';
 import { Badge } from '@/components/ui/badge';
 import { Combobox } from '@/components/ui/combobox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Tooltiper } from '@/components/ui/tooltip';
 import { useTRPC } from '@/integrations/trpc/react';
 import { cn } from '@/utils/cn';
 import {
@@ -13,11 +22,21 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { createFileRoute, useParams } from '@tanstack/react-router';
-import { PauseIcon, PlayIcon, SaveIcon, ScrollTextIcon, ServerIcon } from 'lucide-react';
+import { Link, createFileRoute, useParams } from '@tanstack/react-router';
+import {
+  ActivityIcon,
+  PauseIcon,
+  PlayIcon,
+  SaveIcon,
+  ScrollTextIcon,
+  ServerIcon,
+  WaypointsIcon,
+} from 'lucide-react';
+import { createParser, parseAsString, useQueryState } from 'nuqs';
 import VirtualList from 'rc-virtual-list';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { z } from 'zod';
 
 export const Route = createFileRoute('/_app/$organizationId/$projectId/logs')({
   component: Component,
@@ -34,6 +53,36 @@ const RANGES = [
 
 const LEVELS = ['error', 'warn', 'info', 'debug'] as const;
 
+/**
+ * The page's state, in the URL.
+ *
+ * It is here so a link can point at it: a metric spike, a log line's neighbour,
+ * a span's window all navigate to this route with a window and a service, and
+ * none of that works while the filters live in `useState`. nuqs rather than the
+ * route's `validateSearch` because Explore already uses nuqs and because
+ * `validateSearch` strips keys it does not know — which would quietly delete a
+ * parameter the moment two of us disagreed about the schema.
+ */
+const RANGE_PARAM = createParser({
+  parse: (value: string) =>
+    z
+      .enum(RANGES.map((r) => r.value) as [string, ...string[]])
+      .safeParse(value).data ?? null,
+  serialize: (value: string) => value,
+}).withDefault('1h');
+
+const TEXT_PARAM = parseAsString.withDefault('');
+
+/**
+ * Typing writes to the URL, but throttled and without a history entry: a
+ * back button that walks back through every character of a search is not a
+ * back button.
+ */
+const SEARCH_PARAM = TEXT_PARAM.withOptions({
+  throttleMs: 400,
+  history: 'replace',
+});
+
 /** Severity drives colour; anything unrecognised stays neutral rather than guessing. */
 const LEVEL_CLASS: Record<string, string> = {
   error: 'text-red-500',
@@ -47,6 +96,19 @@ const LEVEL_CLASS: Record<string, string> = {
 const ROW_HEIGHT = 30;
 const LIST_HEIGHT = 560;
 
+/** A pinned window, short enough to sit under the range picker. */
+function formatWindow(startDate: string, endDate: string): string {
+  const from = new Date(startDate);
+  const to = new Date(endDate);
+  const sameDay = from.toISOString().slice(0, 10) === to.toISOString().slice(0, 10);
+
+  const time = (date: Date) => date.toISOString().slice(11, 19);
+
+  return sameDay
+    ? `${from.toISOString().slice(0, 10)} ${time(from)}–${time(to)}`
+    : `${from.toISOString().slice(0, 16)} → ${to.toISOString().slice(0, 16)}`;
+}
+
 function formatTimestamp(nanoseconds: string): string {
   // Nanoseconds exceed Number.MAX_SAFE_INTEGER, so divide as BigInt before
   // converting — parseInt would lose the low digits and, worse, do it silently.
@@ -55,15 +117,22 @@ function formatTimestamp(nanoseconds: string): string {
 }
 
 function Component() {
-  const { projectId } = useParams({
+  const { organizationId, projectId } = useParams({
     from: '/_app/$organizationId/$projectId/logs',
   });
   const trpc = useTRPC();
 
-  const [range, setRange] = useState<(typeof RANGES)[number]['value']>('1h');
-  const [service, setService] = useState<string | null>(null);
-  const [level, setLevel] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
+  const [range, setRange] = useQueryState('range', RANGE_PARAM);
+  const [service, setService] = useQueryState('service');
+  const [level, setLevel] = useQueryState('level');
+  const [search, setSearch] = useQueryState('q', SEARCH_PARAM);
+  // An absolute window, as every correlation link carries. It supersedes the
+  // preset rather than being one of its values: a link from a chart points at a
+  // moment, and "last hour" resolved when the link is FOLLOWED is a different
+  // hour from the one that was clicked.
+  const [start, setStart] = useQueryState('start');
+  const [end, setEnd] = useQueryState('end');
+  const pinned = !!start && !!end;
   // "Follow" is a poll, not a WebSocket. gigapipe does expose /loki/api/v1/tail,
   // but a socket needs its own auth, backpressure and reconnect handling on a
   // path that is already rate-limited and cached; a 5s refetch gives the same
@@ -81,6 +150,15 @@ function Component() {
     return () => clearInterval(id);
   }, [following]);
 
+  // Arriving on a link with a pinned window while Follow was left on would poll
+  // a window that cannot move, which looks like a broken Follow button rather
+  // than like a pinned window.
+  useEffect(() => {
+    if (pinned && following) {
+      setFollowing(false);
+    }
+  }, [pinned, following]);
+
   const enabled = useQuery(trpc.observability.enabled.queryOptions());
   const telemetryOn = enabled.data?.enabled ?? false;
 
@@ -92,16 +170,17 @@ function Component() {
   );
 
   const { startDate, endDate } = useMemo(() => {
-    const minutes =
-      RANGES.find((r) => r.value === range)?.minutes ?? 60;
-    const end = new Date();
-    return {
-      endDate: end.toISOString(),
-      startDate: new Date(end.getTime() - minutes * 60_000).toISOString(),
-    };
-    // windowTick is a deliberate dependency: it is what advances `end` to now
-    // on each poll.
-  }, [range, windowTick]);
+    // Shared with the link builders, so what a correlation link points at and
+    // what this page resolves are the same window by construction.
+    return resolveTelemetryWindow(
+      { start, end },
+      RANGES.find((r) => r.value === range)?.minutes ?? 60,
+    );
+    // windowTick is a deliberate dependency: it is what advances the end of a
+    // PRESET window to now on each poll. A pinned window does not move, which
+    // is why Follow is disabled below rather than left to spin on a fixed
+    // window and never show a new line.
+  }, [range, windowTick, start, end]);
 
   const logs = useQuery(
     trpc.observability.logs.queryOptions(
@@ -129,10 +208,21 @@ function Component() {
       {
         enabled: telemetryOn,
         placeholderData: keepPreviousData,
-        refetchInterval: following ? 5000 : false,
+        refetchInterval: following && !pinned ? 5000 : false,
       },
     ),
   );
+
+  // Offered only when this project writes a counter that has carried the
+  // selected service. Returns null far more often than not, on purpose.
+  const exploreSuggestion = useExploreSuggestion({
+    projectId,
+    organizationId,
+    service,
+    start: startDate,
+    end: endDate,
+    enabled: telemetryOn,
+  });
 
   const savedSearches = useQuery(
     trpc.observability.savedSearches.queryOptions(
@@ -225,13 +315,41 @@ function Component() {
           <span className="text-muted-foreground text-sm">Searching…</span>
         )}
         <div className="ml-auto flex gap-2">
-          <Button
-            variant={following ? 'default' : 'outline'}
-            icon={following ? PauseIcon : PlayIcon}
-            onClick={() => setFollowing((value) => !value)}
+          {exploreSuggestion && (
+            /* Only when this project writes a counter that has actually carried
+               this service — otherwise the link lands on an empty chart, which
+               is a worse answer than no link. */
+            <Tooltiper
+              asChild
+              content={`Chart ${exploreSuggestion.metric} for ${service}`}
+            >
+              <Button asChild icon={ActivityIcon} variant="outline">
+                <Link
+                  params={exploreSuggestion.link.params}
+                  search={exploreSuggestion.link.search}
+                  to={exploreSuggestion.link.to}
+                >
+                  Open in Explore
+                </Link>
+              </Button>
+            </Tooltiper>
+          )}
+          <Tooltiper
+            asChild
+            content="A pinned window cannot move, so there is nothing to follow"
+            disabled={!pinned}
           >
-            {following ? 'Following' : 'Follow'}
-          </Button>
+            <span>
+              <Button
+                disabled={pinned}
+                icon={following ? PauseIcon : PlayIcon}
+                onClick={() => setFollowing((value) => !value)}
+                variant={following ? 'default' : 'outline'}
+              >
+                {following ? 'Following' : 'Follow'}
+              </Button>
+            </span>
+          </Tooltiper>
           <Button variant="outline" icon={SaveIcon} onClick={onSave}>
             Save
           </Button>
@@ -258,11 +376,30 @@ function Component() {
         <div className="flex flex-col gap-2">
           <Label>Range</Label>
           <Combobox
-            placeholder="Range"
             items={RANGES.map((r) => ({ value: r.value, label: r.label }))}
-            value={range}
-            onChange={(value) => setRange(value as typeof range)}
+            onChange={(value) => {
+              // Choosing a preset is how you get OUT of a window a link pinned
+              // you to; leaving the absolute dates in place would make the
+              // picker look broken.
+              void setRange(value);
+              void setStart(null);
+              void setEnd(null);
+            }}
+            placeholder="Range"
+            value={pinned ? '' : range}
           />
+          {pinned && (
+            <button
+              className="text-left text-muted-foreground text-xs underline underline-offset-2"
+              onClick={() => {
+                void setStart(null);
+                void setEnd(null);
+              }}
+              type="button"
+            >
+              Pinned to {formatWindow(startDate, endDate)} — clear
+            </button>
+          )}
         </div>
 
         <div className="flex flex-col gap-2">
@@ -273,8 +410,8 @@ function Component() {
               { value: '', label: 'All services' },
               ...(services.data ?? []).map((s) => ({ value: s, label: s })),
             ]}
+            onChange={(value) => void setService(value || null)}
             value={service ?? ''}
-            onChange={(value) => setService(value || null)}
           />
         </div>
 
@@ -286,17 +423,17 @@ function Component() {
               { value: '', label: 'All levels' },
               ...LEVELS.map((l) => ({ value: l, label: l })),
             ]}
+            onChange={(value) => void setLevel(value || null)}
             value={level ?? ''}
-            onChange={(value) => setLevel(value || null)}
           />
         </div>
 
         <div className="flex flex-col gap-2">
           <Label>Contains</Label>
           <Input
+            onChange={(event) => void setSearch(event.target.value)}
             placeholder="Search line text"
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
           />
         </div>
       </div>
@@ -325,37 +462,12 @@ function Component() {
             itemKey={(line) => `${line.timestampNs}-${line.body.slice(0, 32)}`}
           >
             {(line) => (
-              <div
-                className="flex items-start gap-3 border-b px-3 py-1 font-mono text-xs last:border-b-0"
-                style={{ minHeight: ROW_HEIGHT }}
-              >
-                <span className="shrink-0 text-muted-foreground tabular-nums">
-                  {formatTimestamp(line.timestampNs)}
-                </span>
-                <span
-                  className={cn(
-                    'w-12 shrink-0 uppercase',
-                    LEVEL_CLASS[(line.severity ?? '').toLowerCase()] ??
-                      'text-muted-foreground',
-                  )}
-                >
-                  {line.severity ?? ''}
-                </span>
-                {line.labels.service && (
-                  <span className="shrink-0 text-muted-foreground">
-                    {line.labels.service}
-                  </span>
-                )}
-                <span className="min-w-0 break-all">{line.body}</span>
-                {line.traceId && (
-                  // Correlation ids live in the envelope, not the labels — this
-                  // is what that buys: they are visible and searchable without
-                  // ever having cost a stream.
-                  <span className="ml-auto shrink-0 text-muted-foreground/60">
-                    {line.traceId.slice(0, 8)}
-                  </span>
-                )}
-              </div>
+              <LogLine
+                fallbackService={service}
+                line={line}
+                organizationId={organizationId}
+                projectId={projectId}
+              />
             )}
           </VirtualList>
         </div>
@@ -367,5 +479,130 @@ function Component() {
         </p>
       )}
     </PageContainer>
+  );
+}
+
+/**
+ * One log line, with the two ways out of it.
+ *
+ * A trace id in a log line is the single most useful thing on this page and the
+ * single least usable: it is 32 hex characters, so nobody follows one by hand.
+ * Linking it is most of what "correlation" means here. The id comes from the
+ * envelope when the collector filled it in, and otherwise from the line text —
+ * see trace-ids.ts for why that detection refuses to guess.
+ */
+function LogLine({
+  line,
+  organizationId,
+  projectId,
+  fallbackService,
+}: {
+  line: {
+    timestampNs: string;
+    body: string;
+    severity?: string | null;
+    labels: Record<string, string>;
+    traceId?: string | null;
+  };
+  organizationId: string;
+  projectId: string;
+  /** The service the page is filtered to, when the line does not name one. */
+  fallbackService: string | null;
+}) {
+  const at = isoFromNanos(line.timestampNs);
+  const service = line.labels.service ?? fallbackService ?? undefined;
+
+  // Two seconds either side. Wide enough to catch the span that produced the
+  // line and the ones around it, narrow enough that the answer is still about
+  // this moment.
+  const nearby = aroundTimestamp(at, 2);
+
+  const traceLink = (traceId: string) =>
+    tracesUrl({
+      organizationId,
+      projectId,
+      trace: traceId,
+      ...aroundTimestamp(at, 60),
+    });
+
+  const segments = splitTraceIds(line.body);
+
+  return (
+    <div
+      className="group flex items-start gap-3 border-b px-3 py-1 font-mono text-xs last:border-b-0"
+      style={{ minHeight: ROW_HEIGHT }}
+    >
+      <span className="shrink-0 text-muted-foreground tabular-nums">
+        {formatTimestamp(line.timestampNs)}
+      </span>
+      <span
+        className={cn(
+          'w-12 shrink-0 uppercase',
+          LEVEL_CLASS[(line.severity ?? '').toLowerCase()] ??
+            'text-muted-foreground',
+        )}
+      >
+        {line.severity ?? ''}
+      </span>
+      {line.labels.service && (
+        <span className="shrink-0 text-muted-foreground">
+          {line.labels.service}
+        </span>
+      )}
+      <span className="min-w-0 break-all">
+        {segments.map((segment) =>
+          segment.kind === 'trace' ? (
+            <Link
+              className="underline decoration-dotted underline-offset-2 hover:text-foreground"
+              // Keyed on the offset into the line, which is a real identity —
+              // the segments of one line are stable, and an array index would
+              // not survive the line being re-split after an edit.
+              key={segment.from}
+              params={traceLink(segment.traceId).params}
+              search={traceLink(segment.traceId).search}
+              to={traceLink(segment.traceId).to}
+            >
+              {segment.text}
+            </Link>
+          ) : (
+            <span key={segment.from}>{segment.text}</span>
+          ),
+        )}
+      </span>
+
+      <span className="ml-auto flex shrink-0 items-center gap-2">
+        <Tooltiper asChild content="Traces in the two seconds around this line">
+          <Link
+            className="opacity-0 transition-opacity focus:opacity-100 group-hover:opacity-100"
+            params={{ organizationId, projectId }}
+            search={
+              tracesUrl({
+                organizationId,
+                projectId,
+                service,
+                ...nearby,
+              }).search
+            }
+            to="/$organizationId/$projectId/traces"
+          >
+            <WaypointsIcon className="size-3.5 text-muted-foreground hover:text-foreground" />
+          </Link>
+        </Tooltiper>
+
+        {line.traceId && (
+          // Correlation ids live in the envelope, not the labels — this is what
+          // that buys: they are visible and followable without ever having cost
+          // a stream.
+          <Link
+            className="text-muted-foreground/60 hover:text-foreground"
+            params={traceLink(line.traceId).params}
+            search={traceLink(line.traceId).search}
+            to={traceLink(line.traceId).to}
+          >
+            {line.traceId.slice(0, 8)}
+          </Link>
+        )}
+      </span>
+    </div>
   );
 }

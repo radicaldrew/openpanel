@@ -1,0 +1,66 @@
+---
+title: "Annotations"
+description: "Mark deploys, incidents and notes on your metric charts, by hand or from your deploy pipeline, so a change in a graph lines up with the change that caused it."
+date: 2026-09-07
+---
+
+An annotation is a marker on a metric chart: a dashed line at a moment, or a shaded band over a period. They answer the question every latency spike raises — *what did we change?*
+
+## Adding one by hand
+
+<kbd>⌘</kbd>-click (or <kbd>Ctrl</kbd>-click) any point on a line or area chart. A dialog opens with that moment already filled in:
+
+- **Note** — what happened. Required.
+- **Tags** — comma separated, for filtering later. `deploy`, `incident`, `migration`.
+- **Time** — the clicked bucket, editable, because a click lands on a bucket and the deploy happened at a moment inside it.
+- **This covers a period of time** — turns the marker into a band. The end is prefilled one bucket later, so the band is always visible.
+- **Show on every dashboard in this project** — on by default. A deploy is a fact about the project, not about the dashboard you happened to be looking at.
+
+## Adding one from CI
+
+Post to `/annotations` with the same client id and secret your SDK uses. The client must be a **write** or **root** client, and it must have a secret.
+
+```bash
+curl -X POST https://api.openpanel.dev/annotations \
+  -H 'openpanel-client-id: YOUR_CLIENT_ID' \
+  -H 'openpanel-client-secret: YOUR_CLIENT_SECRET' \
+  -H 'content-type: application/json' \
+  -d '{
+        "text": "Deployed api v2.14.0",
+        "tags": ["deploy", "api"]
+      }'
+```
+
+Only `text` is required:
+
+| Field | Meaning |
+|---|---|
+| `text` | The note. Required. |
+| `time` | ISO timestamp. Defaults to now — which is what a deploy hook means. |
+| `timeEnd` | ISO timestamp. Set it to mark a period rather than a moment. |
+| `tags` | Strings, used by the tag filter on the dashboard. |
+| `dashboardId` | Omit it to show the annotation on every dashboard in the project. |
+
+There is no `projectId` field. The client secret already names exactly one project, and a second answer to "whose annotation is this" is one that could be forged.
+
+The command is also on **Settings → Tracking script**, with your own client id filled in.
+
+<Callout>A self-hosted deployment posts to its own API URL rather than `api.openpanel.dev` — the same base URL your SDK is configured with.</Callout>
+
+## Reading them
+
+Point markers are dashed vertical lines with a small triangle; periods are shaded bands. Hover a marker for the note and its tags. Click one to delete it.
+
+An annotation that started before the window but runs into it is drawn clipped to the edge of the chart, so a deploy window that began yesterday still shows on today's view. A point outside the window is not drawn at all, rather than pinned to the edge where it would read as having happened at the start of the range.
+
+## Showing, hiding and filtering
+
+The dashboard toolbar has a bookmark toggle and, once you have tagged anything, a tag picker.
+
+- The **toggle** is remembered per dashboard in your browser. It is yours: turning annotations off does not affect anyone else, and sharing a dashboard link does not turn theirs off.
+- The **tag filter** matches any selected tag, so picking `deploy` and `incident` shows both rather than only annotations carrying both. It lives in the URL, so a link to a dashboard filtered to `incident` reopens filtered to `incident`.
+
+## Next
+
+- [Metric panels](/docs/dashboard/metrics-panels)
+- [Explore](/docs/dashboard/metrics-explore)

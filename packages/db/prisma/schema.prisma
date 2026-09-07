@@ -300,6 +300,7 @@ model Project {
   seoTrackedKeywords SeoTrackedKeyword[]
   seoRankRuns       SeoRankRun[]
   seoAudits         SeoAudit[]
+  annotations       Annotation[]
 
   // When deleteAt > now(), the project will be deleted
   deleteAt DateTime?
@@ -424,6 +425,11 @@ model Dashboard {
   reports        Report[]
   share          ShareDashboard?
 
+  /// Dashboard-level variables. Their current values live in the URL, not
+  /// here — this is the definition (name, type, how the options are resolved).
+  /// [IPrismaDashboardVariables]
+  variables      Json            @default("[]")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
@@ -482,6 +488,17 @@ model Report {
   /// what makes the tenancy matcher unforgeable.
   /// [IPrismaMetricQuery]
   metricQuery Json?
+  /// The PromQL queries this panel runs, when dataSource is `metrics`. Each
+  /// query's `expr` is the source of truth — the builder state beside it is
+  /// only what the editor round-trips. Tenancy is still unforgeable: the
+  /// server rewrites every selector to carry `op_project_id` before the query
+  /// leaves for gigapipe.
+  ///
+  /// Defaults to `[]`, so every existing row is already correct. `metricQuery`
+  /// above stays as a read fallback until scripts/migrate-metric-panels.ts has
+  /// run against production; it is dropped in a later PR.
+  /// [IPrismaPanelQueries]
+  metricQueries Json @default("[]")
 
   dashboardId String
   dashboard   Dashboard     @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
@@ -1043,4 +1060,41 @@ model SeoAudit {
   completedAt  DateTime?
   @@index([projectId, startedAt])
   @@map("seo_audits")
+}
+
+/// A point or span marked on a metric chart: a deploy, an incident, a note.
+/// Written from the dashboard or posted to `POST /api/annotations` with the
+/// project's client secret, which is why `source` distinguishes the two.
+model Annotation {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// null = global: shown on every dashboard in the project
+  dashboardId String?
+  time        DateTime
+  /// Set for a span (a deploy window); null for a point in time
+  timeEnd     DateTime?
+  text        String
+  tags        String[]
+  createdBy   String?
+  /// manual | api
+  source      String    @default("manual")
+  createdAt   DateTime  @default(now())
+
+  @@index([projectId, time])
+  @@map("annotations")
+}
+
+/// Recently run PromQL, per user per project, for the Explore history drawer.
+/// Deliberately not tied to a Report: it records what someone typed, including
+/// the queries that were never saved.
+model PromqlQueryHistory {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId String
+  userId    String
+  expr      String
+  createdAt DateTime @default(now())
+
+  @@index([projectId, userId, createdAt])
+  @@map("promql_query_history")
 }

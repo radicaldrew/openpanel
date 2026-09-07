@@ -1,11 +1,9 @@
 import type { IChartData } from '@/trpc/client';
-import { getChartColor } from '@/utils/theme';
 import { useMemo } from 'react';
 
 export type IRechartPayloadItem = {
   id: string;
   names: string[];
-  color: string;
   event: { id?: string; name: string };
   count: number;
   date: string;
@@ -23,7 +21,7 @@ export function useRechartDataModel(series: IChartData['series']) {
         return {
           date,
           timestamp: new Date(date).getTime(),
-          ...series.reduce((acc, serie, idx) => {
+          ...series.reduce((acc, serie) => {
             return {
               ...acc,
               ...serie.data.reduce(
@@ -33,12 +31,17 @@ export function useRechartDataModel(series: IChartData['series']) {
                       acc2[`${serie.id}:prev:count`] = item.previous.value;
                     }
                     acc2[`${serie.id}:count`] = item.count;
+                    // NO `color`. It used to be baked in from the series'
+                    // position in the VISIBLE array, while the chart coloured
+                    // from its position in the full one — so the tooltip swatch
+                    // could already disagree with the line it described. Colour
+                    // is now assigned once per chart, by series identity, and
+                    // the tooltip looks it up from there.
                     acc2[`${serie.id}:payload`] = {
                       ...item,
                       id: serie.id,
                       event: serie.event,
                       names: serie.names,
-                      color: getChartColor(idx),
                     } satisfies IRechartPayloadItem;
                   }
                   return acc2;

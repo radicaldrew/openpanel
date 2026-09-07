@@ -7,11 +7,17 @@ import {
   getDashboardsByProjectId,
   getId,
   getProjectById,
+  updateDashboardVariables,
 } from '@openpanel/db';
 import type { Prisma } from '@openpanel/db';
+import { zDashboardVariable } from '@openpanel/validation';
 
 import { getProjectAccess, requireProjectAccess } from '../access';
-import { TRPCForbiddenError, TRPCNotFoundError } from '../errors';
+import {
+  TRPCBadRequestError,
+  TRPCForbiddenError,
+  TRPCNotFoundError,
+} from '../errors';
 import { createTRPCRouter, protectedProcedure } from '../trpc';
 
 export const dashboardRouter = createTRPCRouter({
@@ -106,6 +112,48 @@ export const dashboardRouter = createTRPCRouter({
           name: input.name,
         },
       });
+    }),
+  /**
+   * Replaces the dashboard's variable definitions.
+   *
+   * Separate from `update` because the two have different shapes of caller:
+   * `update` is the rename in the sidebar, this is the variable editor modal
+   * posting its whole list. Folding them together would make renaming a
+   * dashboard from a client that predates variables clear them.
+   */
+  updateVariables: protectedProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        variables: z.array(zDashboardVariable).max(20),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      const dashboard = await db.dashboard.findUniqueOrThrow({
+        where: {
+          id: input.id,
+        },
+      });
+
+      await requireProjectAccess({
+        userId: ctx.session.userId,
+        projectId: dashboard.projectId,
+        level: 'write',
+      });
+
+      // Two variables with the same name means one of them silently never
+      // substitutes — `$service` resolves to whichever the lookup finds first.
+      const names = input.variables.map((variable) => variable.name);
+      const duplicate = names.find(
+        (name, index) => names.indexOf(name) !== index,
+      );
+      if (duplicate) {
+        throw new TRPCBadRequestError(
+          `Duplicate variable name: $${duplicate}`,
+        );
+      }
+
+      return updateDashboardVariables(input.id, input.variables);
     }),
   delete: protectedProcedure
     .input(

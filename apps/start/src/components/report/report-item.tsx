@@ -1,4 +1,5 @@
 import { ReportChart } from '@/components/report-chart';
+import type { ReportChartProps } from '@/components/report-chart/context';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,6 +45,9 @@ export function ReportItem({
   startDate,
   endDate,
   interval,
+  annotations,
+  onModifierClick,
+  extraMenuItems,
   onDelete,
   onDuplicate,
   onMove,
@@ -55,6 +59,26 @@ export function ReportItem({
   startDate: any;
   endDate: any;
   interval: any;
+  /**
+   * Annotation markers for the plot area. An ARRAY of Recharts elements: the
+   * chart finds its reference elements by child type, so a fragment or a
+   * wrapper component draws nothing at all, with no error.
+   */
+  annotations?: React.ReactNode[];
+  /** Cmd/Ctrl+click on a point, for creating an annotation there. */
+  onModifierClick?: (payload: {
+    date: string;
+    metaKey: boolean;
+    ctrlKey: boolean;
+  }) => void;
+  /**
+   * Extra click-menu entries — the logs/traces correlation links. Metrics
+   * panels only; the caller decides, since an events panel has no telemetry
+   * behind it.
+   */
+  extraMenuItems?: NonNullable<
+    ReportChartProps['options']
+  >['extraMenuItems'];
   onDelete: (reportId: string) => void;
   onDuplicate: (reportId: string) => void;
   onMove?: (reportId: string) => void;
@@ -197,6 +221,12 @@ export function ReportItem({
             endDate: endDate ?? null,
             interval: interval ?? report.interval,
           }}
+          annotations={annotations}
+          options={
+            onModifierClick || extraMenuItems
+              ? { onModifierClick, extraMenuItems }
+              : undefined
+          }
         />
       </div>
     </div>

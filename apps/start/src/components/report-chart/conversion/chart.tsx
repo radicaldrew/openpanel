@@ -2,6 +2,7 @@ import { changeVisibleSeries } from '@/components/report/reportSlice';
 import { pushModal } from '@/modals';
 import { useDispatch } from '@/redux';
 import type { RouterOutputs } from '@/trpc/client';
+import { chartDateToIso } from '@/utils/chart-dates';
 import { cn } from '@/utils/cn';
 import { getChartColor } from '@/utils/theme';
 import React, { useCallback, useMemo } from 'react';
@@ -111,7 +112,13 @@ export function Chart({ data }: Props) {
       const clickedData = e.activePayload[0].payload;
       if (clickedData.date) {
         pushModal('AddReference', {
-          datetime: new Date(clickedData.date).toISOString(),
+            // Through the shared reader: `clickedData.date` is a bucket
+          // string with no zone marker, and `new Date()` reads it as LOCAL
+          // time. This value is PERSISTED, so the shift does not just move
+          // the view — it writes the reference to the wrong instant, and it
+          // stays wrong afterwards for everyone, including viewers in UTC
+          // who could never have produced it.
+          datetime: chartDateToIso(clickedData.date),
         });
       }
     }

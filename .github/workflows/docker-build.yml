@@ -124,6 +124,9 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres?schema=public
           CLICKHOUSE_URL: http://localhost:8123/openpanel
           REDIS_URL: redis://localhost:6379
+          # Non-UTC on purpose: chart bucket dates are zone-less UTC strings, and
+          # `new Date()` parses them as local time. A UTC runner never sees that bug.
+          TZ: America/Los_Angeles
 
       # - name: Run Biome
       #   run: pnpm lint

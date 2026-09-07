@@ -1,3 +1,4 @@
+import { annotationRouter } from './routers/annotation';
 import { authRouter } from './routers/auth';
 import { chartRouter } from './routers/chart';
 import { chatRouter } from './routers/chat';
@@ -65,6 +66,7 @@ export const appRouter = createTRPCRouter({
   seo: seoRouter,
   group: groupRouter,
   cohort: cohortRouter,
+  annotation: annotationRouter,
 });
 
 // export type definition of API

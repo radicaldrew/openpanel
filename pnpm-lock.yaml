@@ -521,6 +521,12 @@ importers:
       '@openpanel/web':
         specifier: ^1.0.1
         version: 1.0.5
+      '@prometheus-io/codemirror-promql':
+        specifier: ^0.314.0
+        version: 0.314.0(@codemirror/autocomplete@6.20.0)(@codemirror/language@6.12.1)(@codemirror/lint@6.9.2)(@codemirror/state@6.5.4)(@codemirror/view@6.39.11)(@lezer/common@1.5.0)(@lezer/highlight@1.2.3)(@lezer/lr@1.4.7)
+      '@prometheus-io/lezer-promql':
+        specifier: ^0.314.0
+        version: 0.314.0(@lezer/highlight@1.2.3)(@lezer/lr@1.4.7)
       '@radix-ui/react-accordion':
         specifier: ^1.2.12
         version: 1.2.12(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -7113,6 +7119,17 @@ packages:
     resolution: {integrity: sha512-mrZOev24EDhnefmnZX7WVVT7v+r9LttPRqf54ONvj6re4XMF7wFTpK2tLJi4XHB7fFp/6xhYbgRel8YV7gQiyA==}
     peerDependencies:
       '@opentelemetry/api': ^1.8
+
+  '@prometheus-io/codemirror-promql@0.314.0':
+    resolution: {integrity: sha512-cAGR3RmohpkzeNPN6KGR6P1w8wtx06yoTELu45iufucn4LdhMAt+AZQYL7tvTuN3e2yDm2023FBx3LUFRSUCgg==}
+    engines: {node: '>=12.0.0'}
+    peerDependencies:
+      '@codemirror/autocomplete': ^6.4.0
+      '@codemirror/language': ^6.3.0
+      '@codemirror/lint': ^6.0.0
+      '@codemirror/state': ^6.1.1
+      '@codemirror/view': ^6.4.0
+      '@lezer/common': ^1.0.1
 
   '@prometheus-io/lezer-promql@0.314.0':
     resolution: {integrity: sha512-UAacz1+s6fY5Mh7LEFJ76Ywno/jFLwpuHgZPFi7QBKosHdolxqpybbK11LNd8OXDDQNdoSlcKsohz913GbFNWw==}
@@ -14738,6 +14755,10 @@ packages:
 
   lru-cache@11.5.1:
     resolution: {integrity: sha512-RPimw/7aMdv2oqRrxKwvZXcPfwBrn/JZ2xYcY9Hus/6LaS3VOAKVWKWgNLCFSiOm1ESXinjsDlidVU7JlnCN2A==}
+    engines: {node: 20 || >=22}
+
+  lru-cache@11.5.2:
+    resolution: {integrity: sha512-4pfM1Ff0x50o0tQwb5ucw/RzNyD0/YJME6IVcStalZuMWxdt3sR3huStTtxz4PUmvZfRguvDejasvQ2kifR11g==}
     engines: {node: 20 || >=22}
 
   lru-cache@5.1.1:
@@ -26627,6 +26648,20 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@prometheus-io/codemirror-promql@0.314.0(@codemirror/autocomplete@6.20.0)(@codemirror/language@6.12.1)(@codemirror/lint@6.9.2)(@codemirror/state@6.5.4)(@codemirror/view@6.39.11)(@lezer/common@1.5.0)(@lezer/highlight@1.2.3)(@lezer/lr@1.4.7)':
+    dependencies:
+      '@codemirror/autocomplete': 6.20.0
+      '@codemirror/language': 6.12.1
+      '@codemirror/lint': 6.9.2
+      '@codemirror/state': 6.5.4
+      '@codemirror/view': 6.39.11
+      '@lezer/common': 1.5.0
+      '@prometheus-io/lezer-promql': 0.314.0(@lezer/highlight@1.2.3)(@lezer/lr@1.4.7)
+      lru-cache: 11.5.2
+    transitivePeerDependencies:
+      - '@lezer/highlight'
+      - '@lezer/lr'
+
   '@prometheus-io/lezer-promql@0.314.0(@lezer/highlight@1.2.3)(@lezer/lr@1.4.7)':
     dependencies:
       '@lezer/highlight': 1.2.3
@@ -36050,6 +36085,8 @@ snapshots:
 
   lru-cache@11.5.1: {}
 
+  lru-cache@11.5.2: {}
+
   lru-cache@5.1.1:
     dependencies:
       yallist: 3.1.1
@@ -37180,7 +37217,7 @@ snapshots:
     dependencies:
       '@next/env': 16.0.7
       '@swc/helpers': 0.5.15
-      caniuse-lite: 1.0.30001757
+      caniuse-lite: 1.0.30001788
       postcss: 8.4.31
       react: 19.2.3
       react-dom: 19.2.3(react@19.2.3)
@@ -37205,7 +37242,7 @@ snapshots:
     dependencies:
       '@next/env': 16.0.7
       '@swc/helpers': 0.5.15
-      caniuse-lite: 1.0.30001757
+      caniuse-lite: 1.0.30001788
       postcss: 8.4.31
       react: 19.2.3
       react-dom: 19.2.3(react@19.2.3)
@@ -40065,7 +40102,7 @@ snapshots:
     dependencies:
       '@img/colour': 1.0.0
       detect-libc: 2.1.2
-      semver: 7.7.3
+      semver: 7.7.4
     optionalDependencies:
       '@img/sharp-darwin-arm64': 0.34.5
       '@img/sharp-darwin-x64': 0.34.5

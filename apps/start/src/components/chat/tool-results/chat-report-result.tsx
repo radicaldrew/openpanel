@@ -1,6 +1,7 @@
 import { ReportChart } from '@/components/report-chart';
 import { Button } from '@/components/ui/button';
 import { pushModal } from '@/modals';
+import type { IChartData } from '@/trpc/client';
 import type { IReport, IReportInput } from '@openpanel/validation';
 import { SaveIcon } from 'lucide-react';
 import { asReportOutput } from './output-types';
@@ -31,6 +32,35 @@ export function ChatReportResult({ part }: ToolResultProps) {
       />
     </ToolStateGuard>
   );
+}
+
+/**
+ * The chart the tool already computed, if it returned a renderable one.
+ *
+ * Every one of these tools answers `{ report, data }` and the `data` half IS a
+ * `FinalChart` — the same thing `chart.chart` would return. Handing it to the
+ * renderer means the panel draws what the model was actually looking at, and
+ * saves a round trip that re-runs the same query the moment the message
+ * appears.
+ *
+ * Checked at runtime rather than cast: `ReportOutput.data` is `unknown`, it
+ * crosses a tool boundary, and a shape that is nearly-but-not-quite a chart
+ * would throw inside Recharts rather than anywhere with context. When it does
+ * not look like a chart, this returns undefined and the renderer fetches for
+ * itself exactly as before.
+ */
+function asChartData(data: unknown): IChartData | undefined {
+  if (!data || typeof data !== 'object') {
+    return undefined;
+  }
+
+  const candidate = data as { series?: unknown; metrics?: unknown };
+
+  if (!Array.isArray(candidate.series) || typeof candidate.metrics !== 'object') {
+    return undefined;
+  }
+
+  return data as IChartData;
 }
 
 function ChatReportInner({
@@ -75,6 +105,10 @@ function ChatReportInner({
         <ReportChart
           report={report as unknown as IReportInput}
           lazy={false}
+          // Only the four renderers with the owned-result gate read this
+          // (linear, area, histogram, metric); the rest ignore it and fetch as
+          // they always have, so passing it is never worse than not.
+          data={asChartData(value.data)}
           options={{
             hideLegend: false,
             hideXAxis: false,

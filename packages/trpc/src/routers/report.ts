@@ -226,6 +226,9 @@ export const reportRouter = createTRPCRouter({
           // not take a bare `null` for a Json column: it reserves that for a
           // JSON null literal and wants `DbNull` for a SQL NULL.
           metricQuery: report.metricQuery ?? Prisma.DbNull,
+          // Not `DbNull`: the column is non-nullable with a `[]` default, so
+          // the empty list is how a copy of an events report says "no queries".
+          metricQueries: report.metricQueries,
           events: report.events!,
           globalFilters: report.globalFilters ?? [],
           interval: report.interval,

@@ -43,12 +43,16 @@ import ShareOverviewModal from './share-overview-modal';
 import ShareReportModal from './share-report-modal';
 import TableFilters from './table-filters';
 import ViewChartUsers from './view-chart-users';
+import CreateAnnotation from '@/components/annotations/create-annotation-modal';
+import DashboardVariables from '@/components/dashboard/variables/variables-editor-modal';
 import OverviewTopGenericModal from '@/components/overview/overview-top-generic-modal';
 import OverviewTopPagesModal from '@/components/overview/overview-top-pages-modal';
 import { op } from '@/utils/op';
 
 const modals = {
   PageDetails,
+  DashboardVariables,
+  CreateAnnotation,
   AddMetricAlertRule,
   AddGroup,
   EditGroup,

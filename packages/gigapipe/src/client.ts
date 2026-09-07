@@ -342,6 +342,91 @@ export async function queryRange(
   }
 }
 
+export interface InstantQueryParams {
+  promql: string;
+  /** The single instant to evaluate at. */
+  time: Date;
+}
+
+/**
+ * Run a PromQL instant query.
+ *
+ * The same transport and the same error mapping as {@link queryRange}, because
+ * the failure modes are the same: gigapipe's engine has one 30s ceiling for
+ * both, and reports several over-limit conditions as a 500 with a recognisable
+ * body — left as a bare 500 the UI retries them, which makes an expensive query
+ * more expensive rather than less.
+ *
+ * Exists for the stat panel, where a single number is the whole chart. Asking
+ * for a range and taking the last point would pay for every bucket in the
+ * window to render one of them, and would silently show a stale value whenever
+ * the final bucket happened to be empty.
+ */
+export async function queryInstant(
+  params: InstantQueryParams,
+  config: GigapipeConfig | undefined = getGigapipeConfig(),
+): Promise<unknown> {
+  if (!config) {
+    throw new GigapipeNotConfiguredError();
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    config.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+  );
+
+  // POST form rather than a GET query string, for the same reason as the range
+  // query: a truncated query is far worse than a rejected one, because dropping
+  // a trailing matcher can silently widen the selection.
+  const form = new URLSearchParams({
+    query: params.promql,
+    time: String(Math.floor(params.time.getTime() / 1000)),
+  });
+
+  try {
+    const res = await fetch(`${config.url}${GIGAPIPE_ROUTES.promQuery}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        authorization: authHeader(config),
+      },
+      body: form.toString(),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const text = (await res.text().catch(() => '')).slice(0, 2000);
+      const overLimit =
+        /points|too many samples|context deadline exceeded/i.test(text);
+
+      throw new GigapipeError(
+        overLimit
+          ? 'Query is too large — narrow the time range or add a filter'
+          : `gigapipe responded ${res.status} for an instant query`,
+        overLimit ? 413 : res.status,
+        text,
+      );
+    }
+
+    return await readJsonCapped(res, 'instant query');
+  } catch (error) {
+    if (error instanceof GigapipeError) {
+      throw error;
+    }
+
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new GigapipeError('gigapipe timed out running an instant query');
+    }
+
+    throw new GigapipeError(
+      `gigapipe instant query failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export interface LogRangeQueryParams {
   logql: string;
   start: Date;

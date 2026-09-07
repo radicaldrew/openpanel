@@ -106,7 +106,7 @@ export function JsonEditor({
         '&.cm-editor': {
           borderRadius: '6px',
           border: `1px solid ${
-            isValid ? 'hsl(var(--border))' : 'hsl(var(--destructive))'
+            isValid ? 'var(--border)' : 'var(--destructive)'
           }`,
           overflow: 'hidden',
         },
@@ -125,12 +125,12 @@ export function JsonEditor({
           outline: 'none',
         },
         '.cm-gutters': {
-          backgroundColor: 'hsl(var(--muted))',
-          borderRight: '1px solid hsl(var(--border))',
+          backgroundColor: 'var(--muted)',
+          borderRight: '1px solid var(--border)',
           paddingLeft: '8px',
         },
         '.cm-lineNumbers .cm-gutterElement': {
-          color: 'hsl(var(--muted-foreground))',
+          color: 'var(--muted-foreground)',
           paddingRight: '12px',
           paddingLeft: '4px',
         },

@@ -12,3 +12,8 @@ export * from './src/group-by-labels';
 export * from './src/try-catch';
 export * from './server/get-client-ip';
 export * from './src/metric-kind';
+export * from './src/promql/compile-builder';
+export * from './src/promql/legend';
+export * from './src/promql/patterns';
+export * from './src/promql/units';
+export * from './src/promql/variables';

@@ -1,0 +1,79 @@
+---
+title: "Explore"
+description: "An ad-hoc workbench for metric queries: write a query, run it, zoom into what you find, and save it to a dashboard when it turns out to be worth keeping."
+date: 2026-09-07
+---
+
+**Explore** is the metrics page in the sidebar. It uses the same query rows as a metric panel, but nothing is saved until you decide it is worth saving — it is for the question you are asking right now.
+
+## Running a query
+
+Write a query in **Builder** or **Code** mode, then press **Run** or <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd>.
+
+Queries do not run as you type. Every metric query costs a read against your telemetry store, so Run is the trigger — which also means you can write three queries and run them together rather than accidentally running each half-finished draft.
+
+Everything the query rows offer in a panel works here: multiple queries, legends, per-query units, the right axis, hide, min step. See [Metric panels](/docs/dashboard/metrics-panels) for what each does.
+
+## The toolbar
+
+| Control | What it does |
+|---|---|
+| **Range** | A preset window, or custom start and end |
+| **Interval** | The step the chart is drawn at |
+| **Chart type** | Line, area, histogram or a single stat |
+| **Refresh** | Re-run on a timer, for something you are watching |
+| **Zoom out** | Widen the window around what is on screen |
+| **History** | Queries you have run before |
+| **Save** | Turn what is on screen into a dashboard panel |
+
+## Zooming in
+
+Drag across the chart to select a time range. The window snaps to what you selected, as an absolute start and end rather than a preset — so it stays put while you look at it. **Zoom out** widens it again.
+
+## Query history
+
+**History** lists the queries you have run, most recent first, per project. Click one to load it back into the editor. Only queries you actually ran are recorded, and consecutive identical runs are recorded once.
+
+<Callout>Opening someone else's Explore link does not put their queries into your history. The page runs what the link contains, and your history only changes when you press Run.</Callout>
+
+## Sharing a link
+
+The whole state — every query, the range, the interval, the chart type and the refresh setting — lives in the URL. Copying the address bar gives someone the exact chart you are looking at.
+
+Opening a shared link shows the queries without running them, so the recipient chooses when to spend the read. Press **Run** to draw it.
+
+## Saving to a dashboard
+
+**Save** opens the usual save-report dialog and writes the panel to the dashboard you pick, queries and all. What you saved is what you were looking at — a saved panel and the Explore view it came from run the same expressions.
+
+Coming the other way, a dashboard's **⋯** menu has **Open in Explore**, which carries the dashboard's current [variable](/docs/dashboard/dashboard-variables) values across.
+
+## From a spike to the logs behind it
+
+Metric charts are a starting point: a spike at 14:32 should lead to the log lines from 14:32. Click a point on a line, area or histogram chart and the menu offers two ways down.
+
+**View logs for this range** and **View traces for this range** open the logs or traces page on a window around the bucket you clicked — the clicked bucket plus one bucket either side, so a spike caused by something that started just before it is still in view. The window widens with the chart: a minute either side of a minute, a day either side of a day.
+
+Both entries name the service when one can be determined, as *View logs for this range for `api`*. The service comes from the clicked series' own labels — `service_name`, then `job`, then `service` — so clicking one line of a panel broken down by service filters the logs to that service. This works the same way on a dashboard panel and in Explore.
+
+Where the click resolves no series at all — between two lines, or on a previous-period line — the dashboard's `$service` variable is used instead. If a `$service` picker holds several values at once, no service filter is applied rather than one of them being picked silently; you get every service's logs for that minute, which is a wider answer rather than a wrong one.
+
+The menu entry tells you which happened: it reads *View logs for this range **for `api`*** when a service was determined, and plain *View logs for this range* when none was, meaning the link is not filtered by service.
+
+They open in the same tab, so **Back** returns to the dashboard you came from, with its variables as you left them.
+
+## And back out again
+
+The logs and traces pages carry the same idea in the other direction.
+
+- A **trace id in a log line** becomes a link to that trace. Recognised forms are `trace_id=`, `traceId:`, `trace-id`, `tid`, and a W3C `traceparent` header value, with ids of 16 or 32 hex characters.
+- **Logs for this span**, on a span in the trace waterfall, opens the logs written while that span was open — its own window widened by two seconds at each end, filtered to the trace id, because a line written just as a span closed is still part of what the span did.
+- **Open in Explore** on the logs page takes you to a metric query for what you are looking at.
+
+Every one of these is an ordinary link with the state in its URL, so all of them are shareable and all of them can be opened in a new tab.
+
+## Next
+
+- [Metric panels](/docs/dashboard/metrics-panels)
+- [Dashboard variables](/docs/dashboard/dashboard-variables)
+- [Annotations](/docs/dashboard/annotations)

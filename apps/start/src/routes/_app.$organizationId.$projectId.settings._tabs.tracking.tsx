@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { createFileRoute } from '@tanstack/react-router';
 import { CopyIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { DeployAnnotationsSection } from '@/components/annotations/deploy-annotations-section';
 import Syntax from '@/components/syntax';
 import { Button } from '@/components/ui/button';
 import { Combobox } from '@/components/ui/combobox';
@@ -111,6 +112,7 @@ const ConnectWeb = ({ clients }: Props) => {
           </a>
         </p>
       </div>
+      <DeployAnnotationsSection client={client} />
     </div>
   );
 };

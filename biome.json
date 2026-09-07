@@ -81,7 +81,8 @@
       },
       "complexity": {
         "noForEach": "off",
-        "noExcessiveCognitiveComplexity": "off"
+        "noExcessiveCognitiveComplexity": "off",
+        "noVoid": "off"
       }
     }
   },

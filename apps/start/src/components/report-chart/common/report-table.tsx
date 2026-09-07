@@ -1,6 +1,6 @@
 import { Checkbox } from '@/components/ui/checkbox';
 import { useFormatDateInterval } from '@/hooks/use-format-date-interval';
-import { useNumber } from '@/hooks/use-numer-formatter';
+import { useNumber, useUnitFormat } from '@/hooks/use-numer-formatter';
 import { useSelector } from '@/redux';
 import type { IChartData } from '@/trpc/client';
 import { cn } from '@/utils/cn';
@@ -26,6 +26,7 @@ import type * as React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ReportTableToolbar } from './report-table-toolbar';
+import { seriesPanels, showsSumColumn } from './series-units';
 import {
   type ExpandableTableRow,
   type GroupedTableRow,
@@ -228,6 +229,7 @@ export function ReportTable({
   const parentRef = useRef<HTMLDivElement>(null);
   const [scrollMargin, setScrollMargin] = useState(0);
   const number = useNumber();
+  const unitFormat = useUnitFormat();
   const interval = useSelector((state) => state.report.interval);
   const breakdowns = useSelector((state) => state.report.breakdowns);
 
@@ -297,7 +299,7 @@ export function ReportTable({
         }
 
         // Search in metric values
-        const metrics = ['count', 'sum', 'average', 'min', 'max'] as const;
+        const metrics = ['count', 'sum', 'average', 'min', 'max', 'last'] as const;
         if (
           metrics.some((metric) =>
             String(row[metric]).toLowerCase().includes(searchLower),
@@ -489,6 +491,7 @@ export function ReportTable({
       },
       min: { min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY },
       max: { min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY },
+      last: { min: Number.POSITIVE_INFINITY, max: Number.NEGATIVE_INFINITY },
     };
 
     const dateRanges: Record<string, { min: number; max: number }> = {};
@@ -550,6 +553,7 @@ export function ReportTable({
       metricRanges.average = { min: dateMin, max: dateMax };
       metricRanges.min = { min: dateMin, max: dateMax };
       metricRanges.max = { min: dateMin, max: dateMax };
+      metricRanges.last = { min: dateMin, max: dateMax };
     } else {
       // Multiple series: calculate ranges across individual rows only
       if (individualRows.length === 0) {
@@ -627,6 +631,26 @@ export function ReportTable({
     }
     return (visibleSeries as IChartData['series']).map((s) => s.id);
   }, [visibleSeries]);
+
+  // Panel metadata by series id, so each cell can format with the unit of the
+  // query that produced it. Empty for an events report.
+  const panels = useMemo(() => seriesPanels(data.series), [data.series]);
+
+  // Decided over the VISIBLE series: unticking every latency series should
+  // bring Sum back for the counts that are left.
+  //
+  // With NOTHING visible the question is vacuous — `showsSumColumn([])` says
+  // yes, because an events report with no data yet must keep its columns — and
+  // that would put a Sum column back on an all-latency panel the moment
+  // someone unticked the last row. So an empty selection falls back to the
+  // whole set, which is the panel the user is still looking at.
+  const showSum = useMemo(() => {
+    const visible = data.series.filter((serie) =>
+      visibleSeriesIds.includes(serie.id),
+    );
+
+    return showsSumColumn(visible.length > 0 ? visible : data.series);
+  }, [data.series, visibleSeriesIds]);
 
   // Create a hash of visibleSeriesIds to track checkbox state changes
   const visibleSeriesIdsHash = useMemo(() => {
@@ -927,14 +951,31 @@ export function ReportTable({
       });
     });
 
-    // Metric columns
-    const metrics = [
-      { key: 'count', label: 'Unique' },
-      { key: 'sum', label: 'Sum' },
-      { key: 'average', label: 'Average' },
-      { key: 'min', label: 'Min' },
-      { key: 'max', label: 'Max' },
-    ] as const;
+    // Metric columns.
+    //
+    // Sum is dropped and Last put in its place when NO visible series is
+    // additive: totalling a column of latencies, percentages or byte gauges is
+    // arithmetic that means nothing, while the latest value is the number a
+    // metrics panel exists to show. One additive series is enough to keep Sum,
+    // and an events series always counts as additive — so an events report
+    // sees the columns it always has.
+    const metrics = (
+      showSum
+        ? [
+            { key: 'count', label: 'Unique' },
+            { key: 'sum', label: 'Sum' },
+            { key: 'average', label: 'Average' },
+            { key: 'min', label: 'Min' },
+            { key: 'max', label: 'Max' },
+          ]
+        : [
+            { key: 'count', label: 'Unique' },
+            { key: 'last', label: 'Last' },
+            { key: 'average', label: 'Average' },
+            { key: 'min', label: 'Min' },
+            { key: 'max', label: 'Max' },
+          ]
+    ) as readonly { key: 'count' | 'sum' | 'average' | 'min' | 'max' | 'last'; label: string }[];
 
     metrics.forEach((metric) => {
       cols.push({
@@ -975,7 +1016,7 @@ export function ReportTable({
               )}
               style={backgroundStyle}
             >
-              {number.format(value)}
+              {unitFormat.full(value, panels.get(original.serieId)?.unit)}
             </div>
           );
         },
@@ -1020,7 +1061,10 @@ export function ReportTable({
               )}
               style={backgroundStyle}
             >
-              {number.format(value)}
+              {unitFormat.full(
+                value,
+                panels.get(row.original.serieId)?.unit,
+              )}
             </div>
           );
         },
@@ -1038,6 +1082,9 @@ export function ReportTable({
     expandableRows,
     rows,
     metricRanges,
+    panels,
+    showSum,
+    unitFormat,
     dateRanges,
     columnSizing,
     expanded,

@@ -41,6 +41,8 @@
     "@openpanel/sdk-info": "workspace:^",
     "@openpanel/validation": "workspace:^",
     "@openpanel/web": "^1.0.1",
+    "@prometheus-io/codemirror-promql": "^0.314.0",
+    "@prometheus-io/lezer-promql": "^0.314.0",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-aspect-ratio": "^1.1.7",

@@ -1,0 +1,68 @@
+---
+title: "Dashboard variables"
+description: "A variable is a picker at the top of a dashboard that several panels read from. Change the service, and every panel that mentions it reloads — and only those panels."
+date: 2026-09-07
+---
+
+A dashboard variable turns a dashboard about one service into a dashboard about any service. You define it once, reference it in your queries as `$name`, and it appears as a picker above the panels.
+
+## Adding one
+
+Open the dashboard's **⋯** menu and choose **Add variables**. Each variable has:
+
+| Field | What it does |
+|---|---|
+| **Name** | What you write in a query: `service` becomes `$service`. Letters, digits and underscores, starting with a letter or underscore. |
+| **Label** | What the picker is called on screen. Defaults to the name. |
+| **Type** | Where the options come from — see below. |
+| **Allow multiple values** | Lets the picker select more than one option at a time. |
+| **Include an "All" option** | Adds an entry that matches everything. |
+
+### Query variables
+
+The options come from your own telemetry. Two forms are understood:
+
+```
+label_values(up, service_name)     # values of service_name, on the metric `up`
+label_values(service_name)         # values of service_name, across all metrics
+label_names()                      # the label names themselves
+```
+
+You can narrow by label as well: `label_values(up{job="api"}, pod)`.
+
+<Callout>Only equality matchers (`=` and `!=`) work inside that selector. A regex matcher would mean scanning every value of the label, so it is rejected rather than made slow — the editor tells you at the field.</Callout>
+
+### Custom and interval variables
+
+**Custom** takes a list you type, one option per line — useful for a fixed set like `prod` / `staging`. **Interval** offers durations (`1m`, `5m`, `1h`, …) and is handy for a variable you use as a rate window.
+
+## Using one in a query
+
+Write `$name` or `${name}` anywhere in the expression:
+
+```
+sum by (route) (rate(http_requests_total{service_name=~"$service"}[$__rate_interval]))
+```
+
+<Callout type="warn">Use a **regex matcher** — `=~` rather than `=` — whenever a variable might hold more than one value. A multi-value selection substitutes as `(api|web)` and **All** substitutes as `.+`, and neither means anything to a `=` matcher.</Callout>
+
+Values are escaped on the way in, both as regex and as string content, so a value can never break out of the matcher it sits in. A variable with no value is left in the query as written, which then fails to parse — deliberately, so a typo looks like a typo instead of quietly widening the selection to everything.
+
+You can also put a variable in a **panel title**. `$service latency` reads as `api latency` once a value is picked. The stored title keeps the `$service`, so changing the value or renaming the variable never rewrites what you saved.
+
+## Only the panels that use it reload
+
+Each panel is sent only the variables its own queries mention. Changing `$service` reloads the panels that reference `$service`; a panel about `$env`, and every panel that references no variable at all, keeps what it already had. On a twelve-panel dashboard this is the difference between changing one picker and reloading the page.
+
+## Sharing a dashboard
+
+The current selection lives in the URL, as `var_<name>` — so a link to a dashboard is a link to *that dashboard on those values*. A multi-value selection is comma-separated: `?var_service=api,web`.
+
+The **Open in Explore** entry in the dashboard's **⋯** menu carries the same values across, so you can take a dashboard's current state into an ad-hoc query without re-picking anything.
+
+<Callout>The options a picker offers come from the series your project has written. They are not yet narrowed to the dashboard's time range, so a picker may offer a value that selects nothing on a short range — but anything visible on a chart is always in the picker.</Callout>
+
+## Next
+
+- [Metric panels](/docs/dashboard/metrics-panels) — writing the queries variables feed into
+- [Explore](/docs/dashboard/metrics-explore)

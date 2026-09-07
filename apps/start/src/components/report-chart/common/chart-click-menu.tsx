@@ -30,6 +30,18 @@ interface ChartClickMenuProps {
    * Optional callback when menu closes
    */
   onClose?: () => void;
+  /**
+   * Cmd/Ctrl+click on a data point, INSTEAD of opening the menu.
+   *
+   * A modifier click is a direct action — "annotate this moment" — and routing
+   * it through a dropdown would make the fast path the slow one. When this is
+   * absent a modifier click behaves like any other and opens the menu.
+   */
+  onModifierClick?: (payload: {
+    date: string;
+    metaKey: boolean;
+    ctrlKey: boolean;
+  }) => void;
 }
 
 export interface ChartClickMenuHandle {
@@ -44,7 +56,7 @@ export interface ChartClickMenuHandle {
 export const ChartClickMenu = forwardRef<
   ChartClickMenuHandle,
   ChartClickMenuProps
->(({ children, getMenuItems, onClose }, ref) => {
+>(({ children, getMenuItems, onClose, onModifierClick }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [clickPosition, setClickPosition] = useState<{
     x: number;
@@ -54,9 +66,23 @@ export const ChartClickMenu = forwardRef<
 
   const [clickEvent, setClickEvent] = useState<any>(null);
 
+  // Held in a ref so `handleChartClick` keeps its identity: it is a dependency
+  // of the memo that clones the whole chart tree, and re-cloning on every
+  // render of the parent would remount every series.
+  const onModifierClickRef = useRef(onModifierClick);
+  onModifierClickRef.current = onModifierClick;
+
   const handleChartClick = useCallback((e: any) => {
     if (e?.activePayload?.[0] && containerRef.current) {
       const payload = e.activePayload[0].payload;
+
+      const metaKey = e.nativeEvent?.metaKey === true;
+      const ctrlKey = e.nativeEvent?.ctrlKey === true;
+
+      if ((metaKey || ctrlKey) && onModifierClickRef.current && payload?.date) {
+        onModifierClickRef.current({ date: payload.date, metaKey, ctrlKey });
+        return;
+      }
 
       // Calculate click position relative to chart container
       const containerRect = containerRef.current.getBoundingClientRect();
@@ -228,8 +254,14 @@ export const ChartClickMenu = forwardRef<
 
   return (
     <div ref={containerRef} className="relative h-full w-full">
+      {/*
+        An empty menu is never useful, and it is reachable: a chart whose
+        `getMenuItems` returns nothing — which is how the drag-to-zoom path
+        suppresses the menu at the end of a sweep — would otherwise pop a blank
+        box the user has to dismiss.
+      */}
       <DropdownMenu
-        open={clickPosition !== null}
+        open={clickPosition !== null && menuItems.length > 0}
         onOpenChange={handleOpenChange}
       >
         <DropdownMenuTrigger asChild>
