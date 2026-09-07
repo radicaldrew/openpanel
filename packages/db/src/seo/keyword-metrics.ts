@@ -5,6 +5,7 @@ import {
   fetchKeywordOverview,
   type KeywordMetricRow,
   type KeywordMetricsClient,
+  resolveKeywordDataLanguage,
 } from '@openpanel/dataforseo';
 import { originalCh } from '../clickhouse/client';
 import { db } from '../prisma-client';
@@ -192,9 +193,14 @@ export async function fetchAndStoreKeywordMetrics(
   if (!config) {
     throw new Error(`Project ${projectId} has no SEO config`);
   }
+  // Labs / Google Ads only serve a country's own languages; see
+  // resolveKeywordDataLanguage. SERP rank checks keep the configured one.
   const market = {
     locationCode: config.locationCode,
-    languageCode: config.languageCode,
+    languageCode: resolveKeywordDataLanguage(
+      config.locationCode,
+      config.languageCode
+    ),
   };
 
   const client =

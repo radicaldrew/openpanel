@@ -6,6 +6,7 @@ import type {
   MonthlySearch,
   SerpLiveItem,
 } from '@openpanel/dataforseo';
+import { resolveKeywordDataLanguage } from '@openpanel/dataforseo';
 import { getGscQueries } from '../gsc';
 import { SEO_CACHE_TTL_SECONDS, withSeoCache } from './cache';
 import { getDfsClientForOrganization, getProjectOrganizationId } from './client';
@@ -159,8 +160,22 @@ interface SeedInput {
   limit: number;
 }
 
+/** SERP market: Google serves any language in any country. */
 function marketParams(ctx: SeoResearchContext) {
   return { locationCode: ctx.locationCode, languageCode: ctx.languageCode };
+}
+
+/**
+ * Keyword-data market (Labs / Google Ads): those APIs only serve a country's
+ * own languages and reject anything else as a charged
+ * "Invalid Field: 'language_code'" failure, so fall back to the country's
+ * default language (e.g. Israel + "en" → "he").
+ */
+function labsMarketParams(ctx: SeoResearchContext) {
+  return {
+    locationCode: ctx.locationCode,
+    languageCode: resolveKeywordDataLanguage(ctx.locationCode, ctx.languageCode),
+  };
 }
 
 export async function researchKeywordIdeas({
@@ -169,7 +184,7 @@ export async function researchKeywordIdeas({
   limit,
 }: SeedInput): Promise<KeywordResearchRow[]> {
   const ctx = await getSeoResearchContext(projectId);
-  const params = { keyword: seed, limit, ...marketParams(ctx) };
+  const params = { keyword: seed, limit, ...labsMarketParams(ctx) };
   const items = await withSeoCache(
     {
       organizationId: ctx.organizationId,
@@ -188,7 +203,7 @@ export async function researchKeywordSuggestions({
   limit,
 }: SeedInput): Promise<KeywordResearchRow[]> {
   const ctx = await getSeoResearchContext(projectId);
-  const params = { keyword: seed, limit, ...marketParams(ctx) };
+  const params = { keyword: seed, limit, ...labsMarketParams(ctx) };
   const items = await withSeoCache(
     {
       organizationId: ctx.organizationId,
@@ -207,7 +222,7 @@ export async function researchRelatedKeywords({
   limit,
 }: SeedInput): Promise<KeywordResearchRow[]> {
   const ctx = await getSeoResearchContext(projectId);
-  const params = { keyword: seed, limit, ...marketParams(ctx) };
+  const params = { keyword: seed, limit, ...labsMarketParams(ctx) };
   const items = await withSeoCache(
     {
       organizationId: ctx.organizationId,
@@ -348,7 +363,7 @@ export async function getRankedKeywords({
     limit,
     offset,
     orderBy: ['ranked_serp_element.serp_item.etv,desc'],
-    ...marketParams(ctx),
+    ...labsMarketParams(ctx),
   };
   const page = await withSeoCache(
     {

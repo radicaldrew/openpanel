@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Loader2Icon, SaveIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { SeoLocationPicker } from './seo-location-picker';
 import {
@@ -128,16 +128,30 @@ export function SeoProjectConfigForm({
 }: Props) {
   const trpc = useTRPC();
   const invalidateStatus = useInvalidateSeoStatus();
-  const languagesQuery = useQuery(
-    trpc.seo.settings.listLanguages.queryOptions(undefined, {
-      staleTime: Number.POSITIVE_INFINITY,
-    })
-  );
-  const languages: ReadonlyArray<{ code: string; label: string }> =
-    languagesQuery.data ?? FALLBACK_LANGUAGES;
   const [state, setState] = useState<FormState>(() =>
     initialState(config, gscSiteUrl)
   );
+  // DataForSEO's keyword APIs only serve a country's own languages, so the
+  // list follows the chosen location.
+  const languagesQuery = useQuery(
+    trpc.seo.settings.listLanguages.queryOptions(
+      { locationCode: state.locationCode ?? undefined },
+      { staleTime: Number.POSITIVE_INFINITY }
+    )
+  );
+  const languages: ReadonlyArray<{ code: string; label: string }> =
+    languagesQuery.data ?? FALLBACK_LANGUAGES;
+  const languageIsServed = languages.some(
+    (language) => language.code === state.languageCode
+  );
+  useEffect(() => {
+    // When the location changes to one that does not serve the selected
+    // language, switch to that country's first (default) language.
+    if (languagesQuery.data && !languageIsServed && languages[0]) {
+      const fallback = languages[0].code;
+      setState((previous) => ({ ...previous, languageCode: fallback }));
+    }
+  }, [languagesQuery.data, languageIsServed, languages]);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>(
     {}
   );

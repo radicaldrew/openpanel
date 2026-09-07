@@ -1,5 +1,6 @@
 import {
   getIsoCountryCode,
+  getLanguageOptions,
   isDataForSeoError,
   LOCATION_OPTIONS,
   type LocationOption,
@@ -238,10 +239,18 @@ export const seoSettingsRouter = createTRPCRouter({
       return searchLocations(input.q, input.limit);
     }),
 
-  listLanguages: protectedProcedure.query(() =>
-    SERP_LANGUAGE_OPTIONS.map((language) => ({
-      code: language.code,
-      label: language.label,
-    }))
-  ),
+  listLanguages: protectedProcedure
+    .input(z.object({ locationCode: z.number().int().optional() }).optional())
+    .query(({ input }) => {
+      // Keyword-data APIs only serve a country's own languages, so once a
+      // location is chosen offer just those; the full SERP list otherwise.
+      const options =
+        input?.locationCode === undefined
+          ? SERP_LANGUAGE_OPTIONS
+          : getLanguageOptions(input.locationCode);
+      return options.map((language) => ({
+        code: language.code,
+        label: language.label,
+      }));
+    }),
 });

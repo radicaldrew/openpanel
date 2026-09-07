@@ -73,6 +73,28 @@ function truncatePayload(value: unknown): string {
     : text;
 }
 
+/**
+ * DataForSEO explains HTTP-level rejections in the body's `status_message`
+ * (e.g. 403 "Access denied. Visit Plans and Subscriptions to activate ...").
+ * Surface it in the error message so a caller sees what to fix, not just
+ * the status code.
+ */
+function describeHttpFailure(rawText: string): string {
+  try {
+    const parsed: unknown = JSON.parse(rawText);
+    if (!isRecord(parsed)) {
+      return '';
+    }
+    const message =
+      typeof parsed.status_message === 'string' ? parsed.status_message.trim() : '';
+    const code =
+      typeof parsed.status_code === 'number' ? ` (${parsed.status_code})` : '';
+    return message ? `: ${message}${code}` : '';
+  } catch {
+    return '';
+  }
+}
+
 function classifyHttpStatus(status: number): DataForSeoErrorKind {
   if (status >= 500) {
     return 'upstream';
@@ -185,7 +207,7 @@ export function createDataforseoTransport(
 
       const rawText = await response.text();
       throw new DataForSeoError(
-        `DataForSEO HTTP ${response.status} on ${path}`,
+        `DataForSEO HTTP ${response.status} on ${path}${describeHttpFailure(rawText)}`,
         {
           kind: classifyHttpStatus(response.status),
           path,

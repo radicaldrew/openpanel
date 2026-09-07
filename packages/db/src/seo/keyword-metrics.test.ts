@@ -24,11 +24,15 @@ vi.mock('../prisma-client', () => ({ db: dbMock }));
 vi.mock('../clickhouse/client', () => ({ originalCh: chMock, chQuery: vi.fn() }));
 vi.mock('./config', () => ({ getSeoProjectConfig: fns.getSeoProjectConfig }));
 vi.mock('./client', () => ({ getDfsClientForProject: fns.getDfsClientForProject }));
-vi.mock('@openpanel/dataforseo', () => ({
-  fetchKeywordMetricsForList: fns.fetchKeywordMetricsForList,
-  fetchKeywordOverview: vi.fn(),
-  fetchAdsSearchVolume: vi.fn(),
-}));
+vi.mock('@openpanel/dataforseo', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@openpanel/dataforseo')>();
+  return {
+    resolveKeywordDataLanguage: actual.resolveKeywordDataLanguage,
+    fetchKeywordMetricsForList: fns.fetchKeywordMetricsForList,
+    fetchKeywordOverview: vi.fn(),
+    fetchAdsSearchVolume: vi.fn(),
+  };
+});
 
 const { fetchAndStoreKeywordMetrics, getKeywordMetrics } = await import(
   './keyword-metrics'
@@ -101,6 +105,34 @@ describe('fetchAndStoreKeywordMetrics', () => {
       competition: null,
     });
     expect(stored[0]).toMatchObject({ searchVolume: 1200, difficulty: 42 });
+  });
+});
+
+describe('fetchAndStoreKeywordMetrics market', () => {
+  it('sends and stores the language the keyword APIs serve for the location', async () => {
+    // Israel + English: Labs/Ads only serve ar/he there and reject "en" as a
+    // charged "Invalid Field: 'language_code'" failure, so fall back to "he".
+    fns.getSeoProjectConfig.mockResolvedValue({ locationCode: 2376, languageCode: 'en' });
+    fns.fetchKeywordMetricsForList.mockResolvedValue([
+      {
+        keyword: 'bots',
+        searchVolume: 10,
+        cpc: null,
+        competition: null,
+        competitionLevel: null,
+        keywordDifficulty: null,
+        intent: null,
+        monthlySearches: [],
+      },
+    ]);
+
+    await fetchAndStoreKeywordMetrics('p1', ['bots']);
+
+    const requestText = JSON.stringify(fns.fetchKeywordMetricsForList.mock.calls[0]);
+    expect(requestText).toContain('"languageCode":"he"');
+    expect(requestText).not.toContain('"languageCode":"en"');
+    const insert = chMock.insert.mock.calls[0]?.[0];
+    expect(insert.values[0]).toMatchObject({ location_code: 2376, language_code: 'he' });
   });
 });
 
