@@ -8,6 +8,7 @@ import {
   type LlmPlatform,
   type LlmTopPagesItem,
 } from '@openpanel/dataforseo';
+import { resolveKeywordDataLanguage } from '@openpanel/dataforseo';
 import sqlstring from 'sqlstring';
 import { chQuery, TABLE_NAMES } from '../clickhouse/client';
 import { withSeoCache } from './cache';
@@ -31,12 +32,20 @@ const MAX_MENTIONS_LIMIT = 200;
 const DEFAULT_TOP_PAGES_LIMIT = 10;
 const MAX_CROSS_GROUPS = 10;
 
-/** ChatGPT mention data exists for US/en only; Google follows the project. */
+/**
+ * ChatGPT mention data exists for US/en only; Google follows the project.
+ * Like the keyword APIs, LLM-mentions data only exists in a country's own
+ * languages (Israel: he/ar), so an unserved SERP language falls back to the
+ * country default instead of a charged "Invalid Field: 'language_code'".
+ */
 function marketFor(engine: AiEngine, ctx: SeoResearchContext) {
   if (engine === 'chat_gpt') {
     return { locationCode: CHATGPT_LOCATION_CODE, languageCode: CHATGPT_LANGUAGE_CODE };
   }
-  return { locationCode: ctx.locationCode, languageCode: ctx.languageCode };
+  return {
+    locationCode: ctx.locationCode,
+    languageCode: resolveKeywordDataLanguage(ctx.locationCode, ctx.languageCode),
+  };
 }
 
 function normalizeEngines(engines: readonly string[] | undefined): AiEngine[] {

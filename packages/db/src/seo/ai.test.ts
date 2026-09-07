@@ -139,6 +139,24 @@ describe('getAiMentions', () => {
     ]);
   });
 
+  it('falls back to a language the location serves for the Google engine', async () => {
+    // Israel + English: LLM-mentions data only exists in he/ar there; "en"
+    // is rejected as a charged "Invalid Field: 'language_code'".
+    const original = ctx.languageCode;
+    ctx.languageCode = 'en';
+    try {
+      await getAiMentions({ projectId: 'p1', engines: ['google'] });
+    } finally {
+      ctx.languageCode = original;
+    }
+
+    expect(aiSearch.mentionsSearch.mock.calls[0]?.[0]).toMatchObject({
+      platform: 'google',
+      locationCode: 2376,
+      languageCode: 'he',
+    });
+  });
+
   it('lets the prompt explorer search any keyword but not any domain', async () => {
     await getAiMentions({
       projectId: 'p1',
