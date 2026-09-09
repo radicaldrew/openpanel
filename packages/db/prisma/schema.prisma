@@ -1006,13 +1006,23 @@ model EventOutbox {
   projectId String
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  /// The ClickHouse event id. Unique because it is both the idempotency key for
-  /// this table and the `Nats-Msg-Id` the JetStream dedup window reads, so a
-  /// double drain publishes once.
+  /// The ClickHouse event id, so a row on the bus and a row in ClickHouse are
+  /// the same event rather than two identities for it.
+  ///
+  /// Unique because it is this table's idempotency key. It is NOT what
+  /// JetStream dedups on: the drain hashes it into the envelope's `event_id`
+  /// (a deterministic UUIDv5 over source + this id) and sends THAT as
+  /// `Nats-Msg-Id`, which is also what the consumer's event store keys on — one
+  /// identity across all three rather than two values for one event.
   eventId String @unique
 
-  /// Dotted lowercase, e.g. `repo_connected` or `profile.identified`. The last
+  /// Dotted lowercase, e.g. `repo.connected` or `profile.identified` — the last
   /// token(s) of the subject `vero.events.{tenantSlug}.{eventType}`.
+  ///
+  /// Already MAPPED, never the raw OpenPanel name. The event plane's
+  /// `EVENT_TYPE_RE` requires a dot and forbids `_`, so `repo_connected` — the
+  /// name as emitted — is rejected; `toEventType` translates it and the
+  /// original travels in `data.openpanel_event_name`.
   eventType String
 
   /// Resolved from the project at write time; see the note above.

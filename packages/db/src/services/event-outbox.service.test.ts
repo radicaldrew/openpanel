@@ -291,17 +291,41 @@ describe('recordEventForOutbox', () => {
     expect(data.project_id).toBe('gitgraph');
   });
 
-  it('does not let a property overwrite the identifiers it collides with', async () => {
+  /**
+   * System-asserted identity is not overwritable by user-supplied data.
+   *
+   * A customer sending a property called `profile_id` is not exotic, and if
+   * theirs won, the event would still publish and still create a row
+   * downstream — attached to the wrong person, or to nobody. Same failure class
+   * as a plausible-but-wrong id: nothing errors, the join is just silently
+   * wrong.
+   */
+  const identityCollisions: [string, string][] = [
+    ['project_id', 'gitgraph'],
+    ['profile_id', 'user-42'],
+    ['session_id', 'sess-9'],
+  ];
+
+  for (const [key, expected] of identityCollisions) {
+    it(`a user property named ${key} cannot overwrite the real one`, async () => {
+      await recordEventForOutbox({
+        ...input,
+        properties: { [key]: 'somebody-elses-value' },
+      });
+
+      expect(create.mock.calls[0]?.[0]?.data?.data?.[key]).toBe(expected);
+    });
+  }
+
+  it('keeps user properties that do not collide', async () => {
     await recordEventForOutbox({
       ...input,
-      properties: { project_id: 'somebody-elses-project' },
+      properties: { project_id: 'ignored', repo: 'acme/web' },
     });
 
-    // Documents current precedence: properties are spread last, so a
-    // user-supplied `project_id` WINS. Asserted so a change is deliberate.
-    expect(create.mock.calls[0]?.[0]?.data?.data?.project_id).toBe(
-      'somebody-elses-project'
-    );
+    const data = create.mock.calls[0]?.[0]?.data?.data;
+    expect(data.project_id).toBe('gitgraph');
+    expect(data.repo).toBe('acme/web');
   });
 });
 

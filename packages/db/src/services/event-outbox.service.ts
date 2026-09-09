@@ -200,16 +200,21 @@ export async function recordEventForOutbox(
           }
         : {}),
       data: {
+        // User-supplied first, SYSTEM-ASSERTED LAST. The order is the whole
+        // point: a customer is free to send a property called `profile_id`,
+        // and if theirs won it would silently replace the identity gtmsrv
+        // joins on — the event would still publish, still create a row
+        // downstream, and attach to the wrong person or to nobody. Identity
+        // this system asserts must not be overwritable by data it received.
+        ...(input.properties ?? {}),
         // The identifiers gtmsrv joins on, named as the envelope's consumers
         // expect rather than in this codebase's camelCase.
         project_id: input.projectId,
         ...(input.profileId ? { profile_id: input.profileId } : {}),
         ...(input.sessionId ? { session_id: input.sessionId } : {}),
-        ...(input.properties ?? {}),
         // The name as OpenPanel recorded it. ClickHouse still holds the
         // snake_case name, so without this, joining a bus event back to its
-        // source row means knowing the mapping by heart. Written LAST so a
-        // user-defined property cannot shadow it — this one is ours.
+        // source row means knowing the mapping by heart.
         openpanel_event_name: input.eventType,
       },
     },
