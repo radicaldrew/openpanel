@@ -23,6 +23,7 @@
     "@openpanel/importer": "workspace:*",
     "@openpanel/integrations": "workspace:^",
     "@openpanel/js-runtime": "workspace:*",
+    "nats": "^2.29.3",
     "@openpanel/json": "workspace:*",
     "@openpanel/logger": "workspace:*",
     "@openpanel/payments": "workspace:*",
