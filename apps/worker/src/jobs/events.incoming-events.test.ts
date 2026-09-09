@@ -140,7 +140,12 @@ function buildJobData(
 describe('incomingEvent', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (createEvent as Mock).mockImplementation((event) => event);
+    // The shape `createEvent` actually returns — `{ document }`, with the id it
+    // generated. Returning the payload bare was harmless until something read
+    // through `.document`, at which point every test in this file threw.
+    (createEvent as Mock).mockImplementation((event) => ({
+      document: { ...event, id: 'evt-test-id' },
+    }));
   });
 
   it('emits session_start when ingest returns kind="new"', async () => {

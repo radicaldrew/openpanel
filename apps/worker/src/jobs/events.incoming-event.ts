@@ -104,15 +104,28 @@ async function createEventAndNotify(
   // not stop because the outbox table is unavailable. A drop costs one event on
   // the bus, and the drain retries nothing it never saw — so this is logged
   // loudly rather than silently.
-  await recordIncomingEventForOutbox(payload, event.document.id).catch(
-    (error) => {
+  const eventId = event?.document?.id;
+
+  if (eventId) {
+    await recordIncomingEventForOutbox(payload, eventId).catch((error) => {
       logger.error(
         { err: error, event: payload.name, projectId },
         'Failed to queue event for the event plane'
       );
       return false;
-    }
-  );
+    });
+  } else {
+    // Read defensively for the same reason the catch above exists: an
+    // unpublished event costs one row on the bus, while a throw here costs the
+    // event itself — createEvent has already returned, so the ingestion this
+    // function exists to perform is done, and nothing about the event plane is
+    // worth undoing it. `id` is always present in practice (createEvent
+    // generates it), so this is a guard, not an expected branch.
+    logger.error(
+      { event: payload.name, projectId },
+      'Event has no id; skipping the event plane for it'
+    );
+  }
 
   // Only after the event is accepted — recording the first event before a
   // failed createEvent would leave the activation checklist claiming data
