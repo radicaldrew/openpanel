@@ -278,6 +278,20 @@ model Project {
   noDataNotifiedAt           DateTime?
   dataStoppedNotifiedAt      DateTime?
 
+  // Which gtmsrv tenant this project's events belong to, for the NATS event
+  // plane. BOTH are required to publish: the slug builds the subject
+  // (`vero.events.{slug}.{event_type}`) and the id is a mandatory UUID field on
+  // the WrappedEvent envelope. They are stored rather than derived because
+  // nothing in this system can compute one from the other — every other
+  // producer is TOLD its tenant id (event-plane reads SLACK_TENANT_ID and
+  // TWILIO_TENANT_ID from its environment), and inventing one here would put a
+  // tenant id on the bus that no consumer agrees with.
+  //
+  // Nullable, and a project with either one missing is UNMAPPED: its events are
+  // dropped at outbox-write time rather than written as unroutable rows.
+  gtmTenantSlug              String?
+  gtmTenantId                String?       @db.Uuid
+
   clients           Client[]
   reports           Report[]
   dashboards        Dashboard[]
@@ -296,6 +310,7 @@ model Project {
   savedTelemetrySearches SavedTelemetrySearch[]
   signalRules       SignalRule[]
   signalOutbox      SignalOutbox[]
+  eventOutbox       EventOutbox[]
   seoConfig         SeoProjectConfig?
   seoTrackedKeywords SeoTrackedKeyword[]
   seoRankRuns       SeoRankRun[]
@@ -969,6 +984,64 @@ model SignalOutbox {
   @@index([status, nextAttemptAt])
   @@index([projectId, createdAt])
   @@map("signal_outbox")
+}
+
+/// Every accepted analytics event, queued for the NATS event plane.
+///
+/// The difference from SignalOutbox is the selection: SignalOutbox holds only
+/// events a SignalRule matched, and gtmsrv is told what they mean. This holds
+/// EVERY accepted event, and the rule table lives on the gtmsrv side — so the
+/// two exist side by side until the NATS pipe is proven and the D3a HTTP path
+/// is retired.
+///
+/// A row is written only for a project with a tenant mapping. The tenant is
+/// resolved HERE, at write time, not by the drain: dropping an unmapped
+/// project's events is a routing decision, and keeping it out of the drain
+/// leaves that job a dumb pipe that cannot mis-route. The consequence is that
+/// rows already queued keep the mapping they were written with — if a project
+/// is remapped, in-flight rows still publish to the old tenant. That is
+/// correct (they were accepted under that mapping) and is not a bug.
+model EventOutbox {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// The ClickHouse event id. Unique because it is both the idempotency key for
+  /// this table and the `Nats-Msg-Id` the JetStream dedup window reads, so a
+  /// double drain publishes once.
+  eventId String @unique
+
+  /// Dotted lowercase, e.g. `repo_connected` or `profile.identified`. The last
+  /// token(s) of the subject `vero.events.{tenantSlug}.{eventType}`.
+  eventType String
+
+  /// Resolved from the project at write time; see the note above.
+  tenantSlug String
+  tenantId   String @db.Uuid
+
+  /// When the event happened, not when we heard about it — the envelope's
+  /// `ts_ms` comes from this.
+  occurredAt DateTime
+
+  /// The envelope's `data`. Carries profile_id, session_id, project_id and the
+  /// event's own properties.
+  /// [IPrismaEventOutboxData]
+  data Json @default("{}")
+
+  /// pending | sent | failed | abandoned
+  status        String    @default("pending")
+  attempts      Int       @default(0)
+  lastError     String?
+  nextAttemptAt DateTime  @default(now())
+  sentAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  /// The drain's only query: pending work that is due, oldest first.
+  @@index([status, nextAttemptAt])
+  @@index([projectId, createdAt])
+  @@map("event_outbox")
 }
 
 // Per-organization DFS credentials. Org-level, not project-level, so one key

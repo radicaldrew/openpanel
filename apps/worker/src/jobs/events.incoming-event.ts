@@ -7,6 +7,7 @@ import {
   db,
   getProjectByIdCached,
   matchEvent,
+  recordIncomingEventForOutbox,
   recordSignalsForEvent,
   sessionBuffer,
 } from '@openpanel/db';
@@ -89,6 +90,30 @@ async function createEventAndNotify(
       return 0;
     }),
   ]);
+
+  // The event plane. AFTER createEvent rather than alongside it, unlike the
+  // signal sink above: this queues the event for publication to gtmsrv, and an
+  // event that failed to persist must not reach the bus as though it had. The
+  // signal sink can run concurrently because a signal is a claim about an
+  // event we are simultaneously storing; a published event is the event.
+  //
+  // The id is the one createEvent generated, so the row on the bus and the row
+  // in ClickHouse are the same event rather than two identities for it.
+  //
+  // Swallowed for the same reason as the signal sink: analytics ingestion must
+  // not stop because the outbox table is unavailable. A drop costs one event on
+  // the bus, and the drain retries nothing it never saw — so this is logged
+  // loudly rather than silently.
+  await recordIncomingEventForOutbox(payload, event.document.id).catch(
+    (error) => {
+      logger.error(
+        { err: error, event: payload.name, projectId },
+        'Failed to queue event for the event plane'
+      );
+      return false;
+    }
+  );
+
   // Only after the event is accepted — recording the first event before a
   // failed createEvent would leave the activation checklist claiming data
   // arrived that was never persisted.

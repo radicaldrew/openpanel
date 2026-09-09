@@ -55,6 +55,7 @@ export * from './src/seo/schedule';
 export * from './src/seo/status';
 export * from './src/seo/tracking';
 export * from './src/seo/backlinks';
+export * from './src/services/event-outbox.service';
 export * from './src/services/signal-outbox.service';
 export * from './src/services/signal-rule.service';
 export * from './src/services/user.service';

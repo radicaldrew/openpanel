@@ -5,6 +5,7 @@ import {
   getProfileById,
   getSalts,
   groupBuffer,
+  recordIdentifyForOutbox,
   replayBuffer,
   SESSION_TIMEOUT_MS,
   sessionBuffer,
@@ -291,6 +292,20 @@ async function handleIdentify(
   // Profiles must not carry forged bot verdicts either.
   stripBotProperties(payload.properties);
   const uaInfo = parseUserAgent(ua, payload.properties);
+
+  // The event plane. Identify never reaches the worker's ingest path — it
+  // upserts a profile here and writes no ClickHouse event — so if it is to
+  // reach gtmsrv as `profile.identified` at all, it has to be queued here.
+  //
+  // Not awaited into the response and never allowed to throw: identifying a
+  // user must not fail because the outbox table is unavailable.
+  recordIdentifyForOutbox({
+    projectId,
+    profileId: String(payload.profileId),
+    sessionId: context.sessionId,
+    properties: payload.properties,
+  }).catch(() => null);
+
   await upsertProfile({
     ...payload,
     id: payload.profileId,

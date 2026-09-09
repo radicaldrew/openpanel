@@ -37,6 +37,10 @@ declare global {
     type IPrismaSignalRuleFilters = IChartEventFilter[];
     // Facts supporting a signal, passed to gtmsrv verbatim as `evidence`.
     type IPrismaSignalOutboxEvidence = Record<string, unknown>;
+    // The `data` of a WrappedEvent on the NATS event plane. Deliberately open:
+    // it carries the event's own properties, which are user-defined, alongside
+    // the identifiers gtmsrv joins on.
+    type IPrismaEventOutboxData = Record<string, unknown>;
     type IPrismaClickhouseBotEvent = IClickhouseBotEvent;
     type IPrismaCohortDefinition = CohortDefinition;
     // The structured metric query behind a `dataSource = metrics` report. The
