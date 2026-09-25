@@ -11,6 +11,41 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { HttpError } from '@/utils/errors';
 
+// The event-plane mapping (gtm-platform docs/PLAN-signals-tracking.md, P2).
+//
+// gtmsrv sets these when it connects a project to a workspace and clears them
+// (null) to stop sending. The slug has to pass the publisher's own SLUG_RE
+// (apps/worker/src/jobs/event-plane-envelope.ts), or every event from the
+// project is parked as unaddressable at drain time instead of refused here.
+const GTM_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
+const zGtmTenant = {
+  gtmTenantSlug: z.string().regex(GTM_SLUG_RE).nullable().optional(),
+  gtmTenantId: z.string().uuid().nullable().optional(),
+};
+
+/**
+ * Both or neither. A project with one of the two set is unmapped as far as the
+ * outbox is concerned (event-outbox.service tenantForProject) and drops every
+ * event silently, which is the worst way for a half-applied change to fail.
+ */
+export function assertGtmTenantPair(body: {
+  gtmTenantSlug?: string | null;
+  gtmTenantId?: string | null;
+}) {
+  const slug = body.gtmTenantSlug;
+  const id = body.gtmTenantId;
+  if (slug === undefined && id === undefined) return;
+  if ((slug == null) !== (id == null)) {
+    // Checked in the handler rather than with superRefine: these schemas are
+    // also the route's OpenAPI description, and a refined schema is not an
+    // object schema there.
+    throw new HttpError(
+      'gtmTenantSlug and gtmTenantId are set together or cleared together',
+      { status: 400 },
+    );
+  }
+}
+
 // Validation schemas (exported for use in router)
 export const zCreateProject = z.object({
   name: z.string().min(1),
@@ -21,6 +56,7 @@ export const zCreateProject = z.object({
     .array(z.enum(['website', 'app', 'backend']))
     .optional()
     .default([]),
+  ...zGtmTenant,
 });
 
 export const zUpdateProject = z.object({
@@ -29,6 +65,7 @@ export const zUpdateProject = z.object({
   cors: z.array(z.string()).optional(),
   crossDomain: z.boolean().optional(),
   allowUnsafeRevenueTracking: z.boolean().optional(),
+  ...zGtmTenant,
 });
 
 export const zCreateClient = z.object({
@@ -94,7 +131,9 @@ export async function createProject(
   request: FastifyRequest<{ Body: z.infer<typeof zCreateProject> }>,
   reply: FastifyReply
 ) {
-  const { name, domain, cors, crossDomain, types } = request.body;
+  const { name, domain, cors, crossDomain, types, gtmTenantSlug, gtmTenantId } =
+    request.body;
+  assertGtmTenantPair(request.body);
 
   // Generate a default client secret
   const secret = `sec_${crypto.randomBytes(10).toString('hex')}`;
@@ -116,6 +155,9 @@ export async function createProject(
       allowUnsafeRevenueTracking: false,
       filters: [],
       types,
+      // Mapped at birth when gtmsrv connects a new project, so its first
+      // event already reaches the bus.
+      ...(gtmTenantSlug && gtmTenantId ? { gtmTenantSlug, gtmTenantId } : {}),
       clients: {
         create: clientData,
       },
@@ -155,6 +197,7 @@ export async function updateProject(
   reply: FastifyReply
 ) {
   const body = request.body;
+  assertGtmTenantPair(body);
 
   // Verify project exists and belongs to organization
   const existing = await db.project.findFirst({
@@ -192,6 +235,11 @@ export async function updateProject(
   }
   if (body.allowUnsafeRevenueTracking !== undefined) {
     updateData.allowUnsafeRevenueTracking = body.allowUnsafeRevenueTracking;
+  }
+  if (body.gtmTenantSlug !== undefined || body.gtmTenantId !== undefined) {
+    // Validated as a pair above; written as a pair here.
+    updateData.gtmTenantSlug = body.gtmTenantSlug ?? null;
+    updateData.gtmTenantId = body.gtmTenantId ?? null;
   }
 
   const project = await db.project.update({
