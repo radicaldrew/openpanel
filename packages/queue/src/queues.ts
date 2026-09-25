@@ -109,6 +109,10 @@ export type EventsQueuePayload =
   | EventsQueuePayloadCreateSessionEnd
   | EventsQueuePayloadIncomingEvent;
 
+export type CronQueuePayloadEventOutbox = {
+  type: 'eventOutbox';
+  payload: undefined;
+};
 export type CronQueuePayloadMeasureSignals = {
   type: 'measureSignals';
   payload: undefined;
@@ -225,6 +229,7 @@ export type CronQueuePayload =
   | CronQueuePayloadSeoMetricsRefresh
   | CronQueuePayloadSignalOutbox
   | CronQueuePayloadMeasureSignals
+  | CronQueuePayloadEventOutbox
   | CronQueuePayloadMetricAlerts
   | CronQueuePayloadSalt
   | CronQueuePayloadFlushEvents

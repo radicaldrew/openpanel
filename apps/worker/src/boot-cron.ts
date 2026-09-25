@@ -47,6 +47,14 @@ export async function bootCron() {
       pattern: 1000 * 15,
     },
     {
+      // The event plane: drains event_outbox onto NATS for gtmsrv. Written by
+      // the event-plane commits but never registered, so rows were enqueued
+      // and nothing published them. A no-op while NATS_URL is unset.
+      name: 'eventOutbox',
+      type: 'eventOutbox',
+      pattern: 1000 * 5,
+    },
+    {
       name: 'delete',
       type: 'delete',
       pattern: '0 * * * *',

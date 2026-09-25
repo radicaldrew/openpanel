@@ -35,6 +35,7 @@ const CRON_TYPES = [
   'metricAlerts',
   'measureSignals',
   'signalOutbox',
+  'eventOutbox',
   'seoRankScheduler',
   'seoBacklinkScheduler',
   'seoSpendReset',

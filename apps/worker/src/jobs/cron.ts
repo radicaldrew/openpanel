@@ -12,6 +12,7 @@ import { cohortRefreshCronJob } from './cron.cohort-refresh';
 import { dataHealthCronJob } from './cron.data-health';
 import { jobDelete } from './cron.delete';
 import { insightCleanupCronJob } from './cron.insight-cleanup';
+import { eventOutboxCronJob } from './cron.event-outbox';
 import { measureSignalsCronJob } from './cron.measure-signals';
 import { metricAlertsCronJob } from './cron.metric-alerts';
 import { onboardingJob } from './cron.onboarding';
@@ -41,6 +42,9 @@ export async function cronJob(job: Job<CronQueuePayload>) {
     }
     case 'signalOutbox': {
       return signalOutboxCronJob();
+    }
+    case 'eventOutbox': {
+      return eventOutboxCronJob();
     }
     case 'metricAlerts': {
       return await metricAlertsCronJob();
