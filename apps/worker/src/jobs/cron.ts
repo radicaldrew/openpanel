@@ -12,7 +12,8 @@ import { cohortRefreshCronJob } from './cron.cohort-refresh';
 import { dataHealthCronJob } from './cron.data-health';
 import { jobDelete } from './cron.delete';
 import { insightCleanupCronJob } from './cron.insight-cleanup';
-import { eventOutboxCronJob } from './cron.event-outbox';
+import { eventOutboxCronJob, eventPlaneConfig } from './cron.event-outbox';
+import { natsPublisher } from './event-plane-nats';
 import { measureSignalsCronJob } from './cron.measure-signals';
 import { metricAlertsCronJob } from './cron.metric-alerts';
 import { onboardingJob } from './cron.onboarding';
@@ -44,7 +45,10 @@ export async function cronJob(job: Job<CronQueuePayload>) {
       return signalOutboxCronJob();
     }
     case 'eventOutbox': {
-      return eventOutboxCronJob();
+      // The drain needs a publisher and does not own the connection; this is
+      // where it gets one. Unset NATS_URL -> no config -> the drain no-ops.
+      const config = eventPlaneConfig();
+      return eventOutboxCronJob(config ? { publish: natsPublisher(config) } : {});
     }
     case 'metricAlerts': {
       return await metricAlertsCronJob();
