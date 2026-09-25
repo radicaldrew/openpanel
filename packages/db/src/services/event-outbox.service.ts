@@ -150,6 +150,11 @@ export interface RecordEventForOutboxInput {
   profileId?: string | null;
   sessionId?: string | null;
   properties?: Record<string, unknown>;
+  /**
+   * What OpenPanel itself observed about the event — page, referrer, where,
+   * on what. Written after `properties` so a user property cannot shadow it.
+   */
+  context?: Record<string, unknown>;
 }
 
 /**
@@ -207,6 +212,10 @@ export async function recordEventForOutbox(
         // downstream, and attach to the wrong person or to nobody. Identity
         // this system asserts must not be overwritable by data it received.
         ...(input.properties ?? {}),
+        // Observed context after user properties, for the same reason as the
+        // identifiers below: a property called `path` must not replace the
+        // page the event actually happened on.
+        ...(input.context ?? {}),
         // The identifiers gtmsrv joins on, named as the envelope's consumers
         // expect rather than in this codebase's camelCase.
         project_id: input.projectId,
@@ -242,7 +251,58 @@ export async function recordIncomingEventForOutbox(
     profileId: payload.profileId ? String(payload.profileId) : null,
     sessionId: payload.sessionId,
     properties: payload.properties as Record<string, unknown> | undefined,
+    context: observedContext(payload),
   });
+}
+
+/**
+ * The fields OpenPanel lifts OUT of `properties` at ingest.
+ *
+ * The web SDK sends the page as `__path`, `__referrer` and so on; ingest moves
+ * them into their own columns (path, origin, referrer, …) and they are no
+ * longer in `payload.properties`. Without this the bus carried an event with no
+ * page at all, so no gtmsrv rule could ask "which URL" — found in P1 when the
+ * first stored event came back without the `__path` it was sent with.
+ *
+ * Empty values are left out rather than written as "": a server-side event has
+ * no page, and "" would match a filter for an empty path.
+ */
+export function observedContext(
+  payload: Pick<
+    IServiceCreateEventPayload,
+    | 'path'
+    | 'origin'
+    | 'referrer'
+    | 'referrerName'
+    | 'referrerType'
+    | 'country'
+    | 'region'
+    | 'city'
+    | 'device'
+    | 'os'
+    | 'browser'
+  >,
+): Record<string, string> {
+  const pairs: [string, string | undefined | null][] = [
+    ['path', payload.path],
+    ['origin', payload.origin],
+    ['referrer', payload.referrer],
+    ['referrer_name', payload.referrerName],
+    ['referrer_type', payload.referrerType],
+    ['country', payload.country],
+    ['region', payload.region],
+    ['city', payload.city],
+    ['device', payload.device],
+    ['os', payload.os],
+    ['browser', payload.browser],
+  ];
+  const out: Record<string, string> = {};
+  for (const [key, value] of pairs) {
+    if (typeof value === 'string' && value.trim() !== '') {
+      out[key] = value;
+    }
+  }
+  return out;
 }
 
 /**

@@ -12,7 +12,9 @@ vi.mock('../prisma-client', () => ({
 vi.mock('./project.service', () => ({ getProjectByIdCached }));
 
 import {
+  observedContext,
   recordEventForOutbox,
+  recordIncomingEventForOutbox,
   recordIdentifyForOutbox,
   tenantForProject,
   toEventType,
@@ -415,3 +417,67 @@ describe('recordIdentifyForOutbox', () => {
     expect(create).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Ingest lifts `__path`, `__referrer` and friends out of `properties` into their
+ * own columns. The bus has to carry them back, or no rule can ask which page.
+ */
+describe('observed context', () => {
+  const payload = {
+    projectId: 'gitgraph',
+    name: 'screen_view',
+    createdAt: new Date('2026-09-25T12:00:00Z'),
+    profileId: 'user-42',
+    sessionId: 'sess-9',
+    properties: { plan: 'team' },
+    path: '/pricing',
+    origin: 'https://gitgraph.studio',
+    referrer: 'https://google.com',
+    referrerName: 'Google',
+    referrerType: 'search',
+    country: 'IL',
+    device: 'desktop',
+    os: '',
+    browser: undefined,
+  };
+
+  it('puts the page and its context on the bus', async () => {
+    await recordIncomingEventForOutbox(payload as never, 'evt-1');
+    const data = create.mock.calls[0]?.[0]?.data?.data;
+    expect(data).toMatchObject({
+      path: '/pricing',
+      origin: 'https://gitgraph.studio',
+      referrer: 'https://google.com',
+      referrer_name: 'Google',
+      referrer_type: 'search',
+      country: 'IL',
+      device: 'desktop',
+      plan: 'team',
+    });
+  });
+
+  it('leaves out empty values instead of writing ""', () => {
+    const ctx = observedContext(payload as never);
+    expect(ctx).not.toHaveProperty('os');
+    expect(ctx).not.toHaveProperty('browser');
+  });
+
+  it('a user property named path cannot replace the real page', async () => {
+    await recordIncomingEventForOutbox(
+      { ...payload, properties: { path: '/fake' } } as never,
+      'evt-2',
+    );
+    expect(create.mock.calls[0]?.[0]?.data?.data?.path).toBe('/pricing');
+  });
+
+  it('a server event with no page carries no page fields', async () => {
+    await recordIncomingEventForOutbox(
+      { ...payload, path: '', origin: '', referrer: undefined, referrerName: undefined, referrerType: undefined, country: undefined, device: undefined } as never,
+      'evt-3',
+    );
+    const data = create.mock.calls[0]?.[0]?.data?.data;
+    expect(data).not.toHaveProperty('path');
+    expect(data).not.toHaveProperty('origin');
+  });
+});
+
