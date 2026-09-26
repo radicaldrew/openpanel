@@ -291,6 +291,65 @@ export class OpenPanel extends OpenPanelBase {
         }
       }
     });
+
+    // Forms: <form data-track="demo_request"> sends one event on submit, with
+    // the form's own data-* attributes and every field marked
+    // data-track-field, keyed by the field's name exactly as written (not
+    // camel-cased: a field name is already the key somebody chose). Passwords
+    // and files are never sent, marked or not. Capture phase, so a handler
+    // that stops propagation or navigates away does not lose the event.
+    document.addEventListener(
+      'submit',
+      (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement)) {
+          return;
+        }
+        const name = form.getAttribute('data-track');
+        if (!name) {
+          return;
+        }
+        const properties: Record<string, unknown> = {};
+        for (const attr of form.attributes) {
+          if (attr.name.startsWith('data-') && attr.name !== 'data-track') {
+            properties[toCamelCase(attr.name.replace(/^data-/, ''))] =
+              attr.value;
+          }
+        }
+        for (const el of Array.from(form.elements)) {
+          if (
+            !(
+              el instanceof HTMLInputElement ||
+              el instanceof HTMLSelectElement ||
+              el instanceof HTMLTextAreaElement
+            ) ||
+            !el.name ||
+            !el.hasAttribute('data-track-field')
+          ) {
+            continue;
+          }
+          if (el instanceof HTMLInputElement) {
+            if (el.type === 'password' || el.type === 'file') {
+              continue;
+            }
+            if (el.type === 'radio' && !el.checked) {
+              continue;
+            }
+            if (el.type === 'checkbox') {
+              properties[el.name] = el.checked;
+              continue;
+            }
+            if (el.type === 'number' || el.type === 'range') {
+              properties[el.name] = el.value === '' ? null : Number(el.value);
+              continue;
+            }
+          }
+          properties[el.name] = el.value;
+        }
+        super.track(name, properties);
+      },
+      true,
+    );
   }
 
   track(name: string, properties?: TrackProperties) {
