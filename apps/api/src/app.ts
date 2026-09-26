@@ -52,6 +52,7 @@ import importRouter from './routes/import.router';
 import insightsRouter from './routes/insights.router';
 import liveRouter from './routes/live.router';
 import manageRouter from './routes/manage.router';
+import platformRouter from './routes/platform.router';
 import mcpRouter from './routes/mcp.router';
 import miscRouter from './routes/misc.router';
 import oauthRouter from './routes/oauth-callback.router';
@@ -386,6 +387,11 @@ export async function buildApp(
     instance.register(insightsRouter, { prefix: '/insights' });
     instance.register(trackRouter, { prefix: '/track' });
     instance.register(manageRouter, { prefix: '/manage' });
+    // gtm-platform provisioning: one organisation per customer. Not mounted
+    // at all unless a platform token is configured.
+    if (process.env.PLATFORM_ADMIN_TOKEN) {
+      instance.register(platformRouter, { prefix: '/platform' });
+    }
     instance.register(toolsRouter, { prefix: '/tools' });
     instance.register(annotationsRouter, { prefix: '/annotations' });
 
