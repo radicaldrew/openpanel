@@ -325,15 +325,29 @@ export async function recordIdentifyForOutbox(input: {
   profileId: string;
   sessionId?: string | null;
   properties?: Record<string, unknown>;
+  // The SDK's identify sends these at the TOP level, not in properties, so
+  // they were never on the bus: "this visitor is dana@…" arrived without the
+  // email that says so (gtm-platform P4, visitor -> lead).
+  email?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
   occurredAt?: Date;
 }): Promise<boolean> {
+  // Identity after properties, like the identifiers recordEventForOutbox
+  // asserts: a property named `email` cannot stand in for the real one.
+  const identity: Record<string, string> = {};
+  if (input.email?.trim()) identity.email = input.email.trim();
+  if (input.firstName?.trim()) identity.first_name = input.firstName.trim();
+  if (input.lastName?.trim()) identity.last_name = input.lastName.trim();
+  const properties = { ...(input.properties ?? {}), ...identity };
+
   const fingerprint = createHash('sha256')
     .update(
       JSON.stringify([
         input.projectId,
         input.profileId,
         // Sorted so an object built in a different key order is the same fact.
-        Object.entries(input.properties ?? {}).sort(([a], [b]) =>
+        Object.entries(properties).sort(([a], [b]) =>
           a.localeCompare(b),
         ),
       ]),
@@ -347,6 +361,6 @@ export async function recordIdentifyForOutbox(input: {
     occurredAt: input.occurredAt ?? new Date(),
     profileId: input.profileId,
     sessionId: input.sessionId,
-    properties: input.properties,
+    properties,
   });
 }

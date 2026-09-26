@@ -346,6 +346,28 @@ describe('recordIdentifyForOutbox', () => {
 
   const keyOf = () => create.mock.calls[0]?.[0]?.data?.eventId as string;
 
+  it('carries the email and name the SDK sends at the top level', async () => {
+    await recordIdentifyForOutbox({
+      ...identify,
+      email: ' dana@northwind.dev ',
+      firstName: 'Dana',
+      lastName: '',
+      properties: { email: 'someone-else@evil.test', plan: 'pro' },
+    });
+    const data = create.mock.calls[0]?.[0]?.data?.data;
+    expect(data.email).toBe('dana@northwind.dev');
+    expect(data.first_name).toBe('Dana');
+    expect(data).not.toHaveProperty('last_name');
+    expect(data.plan).toBe('pro');
+  });
+
+  it('a change of email is a new fact and publishes again', async () => {
+    await recordIdentifyForOutbox({ ...identify, email: 'a@x.dev' });
+    await recordIdentifyForOutbox({ ...identify, email: 'b@x.dev' });
+    const [a, b] = create.mock.calls.map((c) => c[0]?.data?.eventId);
+    expect(a).not.toBe(b);
+  });
+
   it('publishes as profile.identified', async () => {
     await recordIdentifyForOutbox(identify);
 

@@ -304,6 +304,9 @@ async function handleIdentify(
     profileId: String(payload.profileId),
     sessionId: context.sessionId,
     properties: payload.properties,
+    email: payload.email,
+    firstName: payload.firstName,
+    lastName: payload.lastName,
   }).catch(() => null);
 
   await upsertProfile({
