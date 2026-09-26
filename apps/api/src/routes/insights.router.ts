@@ -324,6 +324,18 @@ const insightsRouter: FastifyPluginAsyncZodOpenApi = async (fastify) => {
 
   fastify.route({
     method: 'GET',
+    url: '/:projectId/events/counts',
+    schema: {
+      tags: TAGS,
+      description: 'Count each event name in a date range, with distinct profiles.',
+      params: projectIdParam,
+      querystring: zDateRange,
+    },
+    handler: c.countEventsByName,
+  });
+
+  fastify.route({
+    method: 'GET',
     url: '/:projectId/events/properties',
     schema: {
       tags: TAGS,

@@ -1209,6 +1209,39 @@ export const listEventNamesCore = (projectId: string): Promise<string[]> =>
   getTopEventNames(projectId);
 
 /**
+ * How often each event happened in a window, and by how many distinct
+ * profiles — the per-event totals an analytics page shows. Read from the
+ * events table (not event_names_mv, which has no window), capped at 100 names.
+ */
+export async function countEventsByNameCore(input: {
+  projectId: string;
+  startDate: string;
+  endDate: string;
+}): Promise<{ name: string; count: number; users: number }[]> {
+  const rows = await clix(ch)
+    .select<{ name: string; count: number; users: number }>([
+      'name',
+      'count() as count',
+      'uniq(profile_id) as users',
+    ])
+    .from(TABLE_NAMES.events)
+    .where('project_id', '=', input.projectId)
+    .where('created_at', 'BETWEEN', [
+      clix.datetime(input.startDate),
+      clix.datetime(input.endDate),
+    ])
+    .groupBy(['name'])
+    .orderBy('count', 'DESC')
+    .limit(100)
+    .execute();
+  return rows.map((r) => ({
+    name: r.name,
+    count: Number(r.count),
+    users: Number(r.users),
+  }));
+}
+
+/**
  * Top-level filterable columns on the `events` table. These apply to
  * every event regardless of name and can be passed straight to
  * `getEventFiltersWhereClause` as filter / breakdown `name` values.

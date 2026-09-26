@@ -31,6 +31,7 @@ import {
   gscGetTopPagesCore,
   gscGetTopQueriesCore,
   listDashboardsCore,
+  countEventsByNameCore,
   listEventNamesCore,
   listEventPropertiesCore,
   listGroupTypesCore,
@@ -480,6 +481,15 @@ export async function listEventNames(
 ) {
   const projectId = await getProjectId(req as RequestWithProjectParam);
   return reply.send(await listEventNamesCore(projectId));
+}
+
+export async function countEventsByName(
+  req: FastifyRequest<{ Params: { projectId?: string }; Querystring: DateRangeInput }>,
+  reply: FastifyReply
+) {
+  const projectId = await getProjectId(req as RequestWithProjectParam);
+  const { startDate, endDate } = await resolveDates(projectId, req.query);
+  return reply.send(await countEventsByNameCore({ projectId, startDate, endDate }));
 }
 
 export const zEventPropertiesQuery = z.object({ eventName: z.string().optional() });
