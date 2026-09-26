@@ -26,6 +26,7 @@ import {
   zOverviewGenericQuerystring,
   zOverviewQuery,
   zPagePerfQuery,
+  zProfilesActivityQuery,
   zProfilesQuery,
   zProfileSessionsQuery,
   zPropertyValuesQuery,
@@ -372,6 +373,18 @@ const insightsRouter: FastifyPluginAsyncZodOpenApi = async (fastify) => {
       querystring: zProfilesQuery,
     },
     handler: c.findProfiles,
+  });
+
+  fastify.route({
+    method: 'GET',
+    url: '/:projectId/profiles/activity',
+    schema: {
+      tags: TAGS,
+      description: 'Page views, events, last seen and top page for up to 500 profiles in a date range.',
+      params: projectIdParam,
+      querystring: zProfilesActivityQuery,
+    },
+    handler: c.profilesActivity,
   });
 
   fastify.route({

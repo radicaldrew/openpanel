@@ -32,6 +32,7 @@ import {
   gscGetTopQueriesCore,
   listDashboardsCore,
   countEventsByNameCore,
+  profilesActivityCore,
   listEventNamesCore,
   listEventPropertiesCore,
   listGroupTypesCore,
@@ -490,6 +491,23 @@ export async function countEventsByName(
   const projectId = await getProjectId(req as RequestWithProjectParam);
   const { startDate, endDate } = await resolveDates(projectId, req.query);
   return reply.send(await countEventsByNameCore({ projectId, startDate, endDate }));
+}
+
+export const zProfilesActivityQuery = zDateRange.extend({
+  profileIds: z
+    .union([z.array(z.string()), z.string().transform((s) => [s])])
+    .refine((a) => a.length >= 1 && a.length <= 500, { message: 'profileIds must have between 1 and 500 items' }),
+});
+
+export async function profilesActivity(
+  req: FastifyRequest<{ Params: { projectId?: string }; Querystring: z.infer<typeof zProfilesActivityQuery> }>,
+  reply: FastifyReply
+) {
+  const projectId = await getProjectId(req as RequestWithProjectParam);
+  const { startDate, endDate } = await resolveDates(projectId, req.query);
+  return reply.send(
+    await profilesActivityCore({ projectId, profileIds: req.query.profileIds, startDate, endDate })
+  );
 }
 
 export const zEventPropertiesQuery = z.object({ eventName: z.string().optional() });

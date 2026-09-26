@@ -1209,6 +1209,46 @@ export const listEventNamesCore = (projectId: string): Promise<string[]> =>
   getTopEventNames(projectId);
 
 /**
+ * What each of these profiles did in a window, in one query: page views, all
+ * events, when last seen and their most viewed page. For "companies on your
+ * site", where the profiles are the identified visitors of one project.
+ */
+export async function profilesActivityCore(input: {
+  projectId: string;
+  profileIds: string[];
+  startDate: string;
+  endDate: string;
+}): Promise<
+  { profileId: string; pageviews: number; events: number; lastSeen: string; topPath: string }[]
+> {
+  if (input.profileIds.length === 0) return [];
+  const rows = await clix(ch)
+    .select<{ profile_id: string; pageviews: number; events: number; last_seen: string; top_path: string }>([
+      'profile_id',
+      "countIf(name = 'screen_view') as pageviews",
+      'count() as events',
+      'max(created_at) as last_seen',
+      "arrayElement(topKIf(1)(path, name = 'screen_view' AND path != ''), 1) as top_path",
+    ])
+    .from(TABLE_NAMES.events)
+    .where('project_id', '=', input.projectId)
+    .where('profile_id', 'IN', input.profileIds)
+    .where('created_at', 'BETWEEN', [
+      clix.datetime(input.startDate),
+      clix.datetime(input.endDate),
+    ])
+    .groupBy(['profile_id'])
+    .execute();
+  return rows.map((r) => ({
+    profileId: r.profile_id,
+    pageviews: Number(r.pageviews),
+    events: Number(r.events),
+    lastSeen: r.last_seen,
+    topPath: r.top_path ?? '',
+  }));
+}
+
+/**
  * How often each event happened in a window, and by how many distinct
  * profiles — the per-event totals an analytics page shows. Read from the
  * events table (not event_names_mv, which has no window), capped at 100 names.
