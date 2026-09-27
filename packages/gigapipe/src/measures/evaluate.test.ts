@@ -332,7 +332,16 @@ describe('assertUsableRule', () => {
     expect(() => assertUsableRule(idleRule)).not.toThrow();
   });
 
-  it('refuses a rule with no subject mapping', () => {
+  it('accepts a rule about the workspace itself, with no subject mapping', () => {
+    const { subject: _s, ...workspaceRule } = idleRule;
+    expect(() => assertUsableRule(workspaceRule)).not.toThrow();
+    const result = evaluateRule({ rule: { ...workspaceRule, forSeconds: 0 }, observations: [acme(IDLE)], previous: new Map(), at: T0 });
+    const emission = result.emissions[0];
+    expect(emission).toBeDefined();
+    expect(emission?.subject).toBeUndefined();
+  });
+
+  it('refuses a subject mapping that names no label', () => {
     expect(() =>
       assertUsableRule({
         ...idleRule,

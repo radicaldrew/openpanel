@@ -43,7 +43,8 @@ export interface MeasureEmission {
   kind: string;
   dedupeKey: string;
   strength: number;
-  subject: { kind: string; id: string };
+  /** Absent for a rule about the workspace itself. */
+  subject?: { kind: string; id: string };
   evidence: Record<string, unknown>;
   /** RFC 3339. The episode's opening, not this evaluation. */
   occurredAt: string;
@@ -101,11 +102,11 @@ export function evaluateRule(input: EvaluateInput): EvaluateResult {
       },
     });
 
-    // A series that cannot name somebody raises nothing. gtmsrv would accept a
-    // subjectless signal and it would open no lead and match no play, so it
-    // would be work that looks done and is not.
-    const subjectId = observation.labels[rule.subject.fromLabel]?.trim();
-    if (!subjectId) {
+    // A rule that maps a subject raises nothing for a series that cannot name
+    // one: the signal would open no lead, which is not what the rule asked for.
+    // A rule without a mapping is about the workspace and needs no label.
+    const subjectId = rule.subject ? observation.labels[rule.subject.fromLabel]?.trim() : undefined;
+    if (rule.subject && !subjectId) {
       outcomes.push({
         seriesKey: observation.seriesKey,
         // The alert state still advances: it is about the metric, not about
@@ -138,7 +139,7 @@ export function evaluateRule(input: EvaluateInput): EvaluateResult {
           kind: rule.signalKind,
           dedupeKey: decision.dedupeKey,
           strength: strengthOf(rule),
-          subject: { kind: rule.subject.kind, id: subjectId },
+          ...(rule.subject && subjectId ? { subject: { kind: rule.subject.kind, id: subjectId } } : {}),
           evidence: evidenceFor(rule, observation, decision.openedAt),
           // When the condition became true, not when this tick noticed it. The
           // ingest contract is explicit that a late evaluation must not date a

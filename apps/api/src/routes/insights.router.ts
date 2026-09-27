@@ -27,6 +27,7 @@ import {
   zOverviewQuery,
   zPagePerfQuery,
   zProfilesActivityQuery,
+  zTelemetryQuery,
   zProfilesQuery,
   zProfileSessionsQuery,
   zPropertyValuesQuery,
@@ -321,6 +322,29 @@ const insightsRouter: FastifyPluginAsyncZodOpenApi = async (fastify) => {
       params: projectIdParam,
     },
     handler: c.listEventNames,
+  });
+
+  fastify.route({
+    method: 'GET',
+    url: '/:projectId/telemetry/metrics',
+    schema: {
+      tags: TAGS,
+      description: 'Metric names this project has written.',
+      params: projectIdParam,
+    },
+    handler: c.telemetryMetricNames,
+  });
+
+  fastify.route({
+    method: 'GET',
+    url: '/:projectId/telemetry/query',
+    schema: {
+      tags: TAGS,
+      description: 'A PromQL range query over this project\'s metrics, scoped to the project.',
+      params: projectIdParam,
+      querystring: zTelemetryQuery,
+    },
+    handler: c.telemetryQuery,
   });
 
   fastify.route({

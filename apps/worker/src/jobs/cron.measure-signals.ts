@@ -8,6 +8,7 @@ import {
   observationsFromMatrix,
   periodSecondsOf,
   queryRange,
+  rewritePromqlForProject,
   type SeriesObservation,
 } from '@openpanel/gigapipe';
 import { getRedisCache } from '@openpanel/redis';
@@ -185,17 +186,23 @@ export async function measureSignalsCronJob(): Promise<void> {
   if (!isGigapipeEnabled()) {
     return;
   }
-  const rules = loadRulesFromEnv();
+  // gtmsrv owns the rules when it is configured (docs/PLAN-signals-tracking.md,
+  // P5): each belongs to a workspace and one of its properties, and crossings
+  // go back to gtmsrv, which checks the rule is that workspace's before it
+  // raises anything. GTM_MEASURE_RULES remains for a deployment without it.
+  const gtm = gtmsrvMeasures();
+  const rules = gtm ? await gtm.rules() : loadRulesFromEnv();
   if (rules.length === 0) {
     return;
   }
+  const workspaceOf = new Map(rules.map((r) => [r.id, (r as GtmMeasureRule).workspaceId]));
 
   const summary = await evaluateMeasures({
     rules: async () => rules,
     observe: observeFromGigapipe,
     loadState: loadStateFromRedis,
     saveState: saveStateToRedis,
-    emit: postToGtmsrv,
+    emit: gtm ? (e) => gtm.emit(e, workspaceOf.get(e.ruleId)) : postToGtmsrv,
     now: () => Date.now(),
   });
 
@@ -244,8 +251,11 @@ async function observeFromGigapipe(
   now: number
 ): Promise<SeriesObservation[]> {
   const periodSeconds = periodSecondsOf(rule);
+  // SCOPED TO THE RULE'S PROJECT, always. The query is customer text, and
+  // gigapipe holds every project's series: unscoped, a rule could read (and
+  // raise signals from) another customer's metrics.
   const payload = await queryRange({
-    promql: rule.promql,
+    promql: rewritePromqlForProject(rule.promql, rule.projectId),
     start: new Date(now - periodSeconds * LOOKBACK_PERIODS * 1000),
     end: new Date(now),
     step: `${periodSeconds}s`,
@@ -318,7 +328,9 @@ async function postToGtmsrv(emission: MeasureEmission): Promise<boolean> {
         ...sourceField(),
         dedupe_key: emission.dedupeKey,
         strength: emission.strength,
-        subject: { kind: emission.subject.kind, id: emission.subject.id },
+        ...(emission.subject
+          ? { subject: { kind: emission.subject.kind, id: emission.subject.id } }
+          : {}),
         evidence: emission.evidence,
         occurred_at: emission.occurredAt,
       }),
@@ -380,3 +392,82 @@ export function sourceField(): { source?: string } {
 
 /** What this producer calls itself on the shared token. */
 export const DEFAULT_SOURCE_NAME = 'Measures';
+
+// --- gtmsrv as the rule store ---------------------------------------------
+
+/** A rule as gtmsrv serves it: the gigapipe shape plus its workspace. */
+export type GtmMeasureRule = MeasureRule & { workspaceId: string };
+
+/**
+ * gtmsrv's measure endpoints, when GTM_MEASURES_URL and GTM_MEASURES_TOKEN are
+ * both set; undefined otherwise. The token is a shared secret between this
+ * worker and gtmsrv, nothing a customer holds.
+ */
+export function gtmsrvMeasures(
+  url = process.env.GTM_MEASURES_URL?.trim(),
+  token = process.env.GTM_MEASURES_TOKEN?.trim(),
+  fetchImpl: typeof fetch = fetch
+):
+  | {
+      rules(): Promise<GtmMeasureRule[]>;
+      emit(e: MeasureEmission, workspaceId: string | undefined): Promise<boolean>;
+    }
+  | undefined {
+  if (!(url && token)) {
+    return undefined;
+  }
+  const base = url.replace(/\/$/, '');
+  const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+  return {
+    async rules() {
+      try {
+        const res = await fetchImpl(`${base}/platform/measure-rules`, {
+          headers,
+          signal: AbortSignal.timeout(30_000),
+        });
+        if (!res.ok) {
+          logger.error({ status: res.status }, 'measure signals: gtmsrv would not list the rules');
+          return [];
+        }
+        const body = (await res.json()) as { rules?: GtmMeasureRule[] };
+        return Array.isArray(body.rules) ? body.rules : [];
+      } catch (error) {
+        logger.error({ err: error }, 'measure signals: gtmsrv unreachable for the rules');
+        return [];
+      }
+    },
+    async emit(e, workspaceId) {
+      if (!workspaceId) {
+        return false;
+      }
+      try {
+        const res = await fetchImpl(`${base}/platform/measure-crossings`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            rule_id: e.ruleId,
+            workspace_id: workspaceId,
+            kind: e.kind,
+            dedupe_key: e.dedupeKey,
+            strength: e.strength,
+            ...(e.subject ? { subject: e.subject } : {}),
+            evidence: e.evidence,
+            occurred_at: e.occurredAt,
+          }),
+          signal: AbortSignal.timeout(30_000),
+        });
+        if (!res.ok) {
+          logger.error(
+            { status: res.status, ruleId: e.ruleId, dedupeKey: e.dedupeKey, body: (await res.text().catch(() => '')).slice(0, 300) },
+            'measure signals: gtmsrv refused the crossing'
+          );
+          return false;
+        }
+        return true;
+      } catch (error) {
+        logger.error({ err: error, ruleId: e.ruleId }, 'measure signals: gtmsrv unreachable for a crossing');
+        return false;
+      }
+    },
+  };
+}

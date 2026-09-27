@@ -32,6 +32,7 @@ import {
   gscGetTopQueriesCore,
   listDashboardsCore,
   countEventsByNameCore,
+  getTelemetryMetricNames,
   profilesActivityCore,
   listEventNamesCore,
   listEventPropertiesCore,
@@ -44,6 +45,11 @@ import {
   resolveClientProjectId,
   type TrafficColumn,
 } from '@openpanel/db';
+import {
+  isGigapipeEnabled,
+  queryRange,
+  rewritePromqlForProject,
+} from '@openpanel/gigapipe';
 import { zChartEventFilter, zRange } from '@openpanel/validation';
 
 /**
@@ -508,6 +514,77 @@ export async function profilesActivity(
   return reply.send(
     await profilesActivityCore({ projectId, profileIds: req.query.profileIds, startDate, endDate })
   );
+}
+
+// ---------------------------------------------------------------------------
+// Telemetry — the project's metrics, for gtmsrv's measure rules
+// ---------------------------------------------------------------------------
+
+/** Metric names this project has written (project-scoped ClickHouse read). */
+export async function telemetryMetricNames(
+  req: FastifyRequest<{ Params: { projectId?: string } }>,
+  reply: FastifyReply
+) {
+  const projectId = await getProjectId(req as RequestWithProjectParam);
+  if (!isGigapipeEnabled()) {
+    return reply.status(503).send({ error: 'Metrics are not enabled on this server' });
+  }
+  return reply.send(await getTelemetryMetricNames(projectId, { limit: 500 }));
+}
+
+export const zTelemetryQuery = z.object({
+  promql: z.string().min(1).max(4000),
+  startDate: z.string(),
+  endDate: z.string(),
+  stepSeconds: z.number().int().min(15).max(86400).default(300),
+});
+
+const MAX_SERIES = 50;
+const MAX_POINTS = 1000;
+
+/**
+ * A PromQL range query, scoped to this project.
+ *
+ * The expression is caller text. It is safe for the same reason the dashboard's
+ * panel query is: rewritePromqlForProject parses it with Prometheus's grammar,
+ * scopes every selector to op_project_id and refuses what it cannot parse.
+ */
+export async function telemetryQuery(
+  req: FastifyRequest<{ Params: { projectId?: string }; Querystring: z.infer<typeof zTelemetryQuery> }>,
+  reply: FastifyReply
+) {
+  const projectId = await getProjectId(req as RequestWithProjectParam);
+  if (!isGigapipeEnabled()) {
+    return reply.status(503).send({ error: 'Metrics are not enabled on this server' });
+  }
+  const start = new Date(req.query.startDate);
+  const end = new Date(req.query.endDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start >= end) {
+    return reply.status(400).send({ error: 'startDate must be before endDate' });
+  }
+  if ((end.getTime() - start.getTime()) / 1000 / req.query.stepSeconds > MAX_POINTS) {
+    return reply.status(400).send({ error: `At most ${MAX_POINTS} points per series; use a larger step` });
+  }
+  let promql: string;
+  try {
+    promql = rewritePromqlForProject(req.query.promql, projectId);
+  } catch (error) {
+    return reply.status(400).send({ error: error instanceof Error ? error.message : 'Invalid PromQL' });
+  }
+  const payload = (await queryRange({ promql, start, end, step: `${req.query.stepSeconds}s` })) as {
+    data?: { resultType?: string; result?: { metric?: Record<string, string>; values?: [number, string][] }[] };
+  };
+  const result = payload?.data?.result ?? [];
+  return reply.send({
+    series: result.slice(0, MAX_SERIES).map((r) => {
+      const { op_project_id: _scope, ...labels } = r.metric ?? {};
+      return {
+        labels,
+        points: (r.values ?? []).map(([t, v]) => [t, Number(v)]),
+      };
+    }),
+    truncated: result.length > MAX_SERIES,
+  });
 }
 
 export const zEventPropertiesQuery = z.object({ eventName: z.string().optional() });

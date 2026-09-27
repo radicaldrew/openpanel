@@ -7,6 +7,7 @@ import type {
 import { observationsFromMatrix } from '@openpanel/gigapipe';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  gtmsrvMeasures,
   DEFAULT_SOURCE_NAME,
   evaluateMeasures,
   loadRulesFromEnv,
@@ -299,5 +300,66 @@ describe('naming this producer to gtmsrv', () => {
     vi.stubEnv('GTM_INGEST_SOURCE', '');
     expect(sourceField()).toEqual({});
     vi.unstubAllEnvs();
+  });
+});
+
+describe('gtmsrvMeasures', () => {
+  const rule = {
+    id: 'msr_1',
+    workspaceId: 'ws-uuid',
+    name: 'Queue backing up',
+    projectId: 'gitgraph',
+    promql: 'max(queue_depth)',
+    operator: 'gt' as const,
+    threshold: 100,
+    forSeconds: 900,
+    signalKind: 'queue_backlog',
+  };
+
+  it('is off unless both the URL and the token are set', () => {
+    expect(gtmsrvMeasures(undefined, 't')).toBeUndefined();
+    expect(gtmsrvMeasures('http://gtmsrv:8848', undefined)).toBeUndefined();
+  });
+
+  it('lists rules and posts a crossing with its workspace, bearer-authenticated', async () => {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    const fake = (async (url: string, init?: RequestInit) => {
+      calls.push({ url, init });
+      if (url.endsWith('/platform/measure-rules')) {
+        return new Response(JSON.stringify({ rules: [rule] }), { status: 200 });
+      }
+      return new Response('{}', { status: 200 });
+    }) as unknown as typeof fetch;
+    const gtm = gtmsrvMeasures('http://gtmsrv:8848/', 'sekret', fake)!;
+
+    expect(await gtm.rules()).toEqual([rule]);
+    const ok = await gtm.emit(
+      {
+        ruleId: 'msr_1',
+        seriesKey: '',
+        kind: 'queue_backlog',
+        dedupeKey: 'measure:msr_1:abc',
+        strength: 100,
+        evidence: { value: 140 },
+        occurredAt: '2026-09-27T10:00:00.000Z',
+      },
+      'ws-uuid'
+    );
+    expect(ok).toBe(true);
+    const post = calls[1]!;
+    expect(post.url).toBe('http://gtmsrv:8848/platform/measure-crossings');
+    expect((post.init?.headers as Record<string, string>).authorization).toBe('Bearer sekret');
+    const body = JSON.parse(String(post.init?.body));
+    expect(body).toMatchObject({ rule_id: 'msr_1', workspace_id: 'ws-uuid', kind: 'queue_backlog', dedupe_key: 'measure:msr_1:abc' });
+    expect(body.subject).toBeUndefined();
+  });
+
+  it('treats a refusal or an unknown workspace as not delivered', async () => {
+    const refusing = (async () => new Response('nope', { status: 403 })) as unknown as typeof fetch;
+    const gtm = gtmsrvMeasures('http://gtmsrv:8848', 't', refusing)!;
+    const e = { ruleId: 'x', seriesKey: '', kind: 'k', dedupeKey: 'd', strength: 1, evidence: {}, occurredAt: '' };
+    expect(await gtm.emit(e, 'ws')).toBe(false);
+    expect(await gtm.emit(e, undefined)).toBe(false);
+    expect(await gtm.rules()).toEqual([]);
   });
 });

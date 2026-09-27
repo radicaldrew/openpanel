@@ -61,7 +61,12 @@ export interface MeasureRule {
   /** 0-100. Defaults to 100: a rule that fired is certain about itself. */
   strength?: number;
 
-  subject: SubjectMapping;
+  /**
+   * Who a crossing is about. Absent: the crossing is about the workspace
+   * itself (queue depth, error rate), a signal that runs plays and opens no
+   * lead. Present: a series without the label raises nothing.
+   */
+  subject?: SubjectMapping;
 
   /** Evaluation cadence, seconds. Defaults to DEFAULT_PERIOD_SECONDS. */
   periodSeconds?: number;
@@ -147,12 +152,12 @@ export function assertUsableRule(rule: MeasureRule): void {
   if (!rule.signalKind.trim()) {
     throw new MeasureRuleError(`rule ${rule.id}: signalKind is required`);
   }
-  if (!rule.subject?.fromLabel?.trim()) {
-    // A rule with no subject mapping can only produce signals that open no
-    // lead and reach no play. Refusing at configuration time beats discovering
-    // it as silence.
+  if (rule.subject && !rule.subject.fromLabel?.trim()) {
+    // A subject mapping that names no label would skip every series: say so at
+    // configuration time rather than as silence. No mapping at all is fine —
+    // the signal is about the workspace.
     throw new MeasureRuleError(
-      `rule ${rule.id}: subject.fromLabel is required — a signal with no subject opens no lead`
+      `rule ${rule.id}: subject.fromLabel is empty — name the label that identifies the subject, or drop the subject`
     );
   }
   if (rule.forSeconds < 0) {
